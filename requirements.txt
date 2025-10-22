@@ -1,0 +1,9 @@
+Flask>=2.2
+flask_sqlalchemy>=3.0
+python-dotenv>=1.0
+requests>=2.28
+pandas>=2.0      # for CSV parsing convenience (optional)
+requests
+dotenv
+openpyxl
+

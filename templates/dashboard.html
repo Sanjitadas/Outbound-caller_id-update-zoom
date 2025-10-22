@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zoom Caller ID Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+  <h1>Zoom Caller ID Update Dashboard</h1>
+  <p>Total Updates: {{ total }}</p>
+  <div id="pieChart" style="width:600px;height:400px;"></div>
+
+  <script>
+    var data = [{
+      values: [{{ success }}, {{ fail }}],
+      labels: ['Success', 'Fail'],
+      type: 'pie'
+    }];
+    var layout = {title: 'Update Status'};
+    Plotly.newPlot('pieChart', data, layout);
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

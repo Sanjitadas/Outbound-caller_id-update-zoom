@@ -1,0 +1,150 @@
+/* === Body & Typography === */
+body {
+    background-color: #f4f6f9;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #343a40;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+}
+
+/* === Cards === */
+.card {
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    background-color: #fff;
+}
+
+.card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+
+.card h2 {
+    font-weight: 700;
+    font-size: 2rem;
+    margin: 0;
+}
+
+/* === Dashboard Headline === */
+h2.text-primary {
+    font-weight: 700;
+    color: #0d6efd;
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+}
+
+/* === Table Styling === */
+.table {
+    border-radius: 12px;
+    overflow: hidden;
+    background-color: #fff;
+}
+
+.table thead {
+    background: linear-gradient(90deg, #0d6efd, #3b8ef3);
+    color: #fff;
+    font-weight: 600;
+}
+
+.table tbody tr:hover {
+    background-color: #eef5ff;
+    transition: background 0.3s ease;
+}
+
+.table td, .table th {
+    vertical-align: middle;
+    padding: 12px 15px;
+    font-size: 0.95rem;
+}
+
+/* Add subtle borders to rows */
+.table tbody tr {
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* === Buttons === */
+.btn {
+    border-radius: 10px;
+    font-weight: 500;
+    transition: all 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Primary, Info, Success button gradients */
+.btn-primary {
+    background: linear-gradient(90deg, #0d6efd, #3b8ef3);
+    border: none;
+    color: #fff;
+}
+
+.btn-info {
+    background: linear-gradient(90deg, #0dcaf0, #3adcf0);
+    border: none;
+    color: #fff;
+}
+
+.btn-success {
+    background: linear-gradient(90deg, #198754, #36b361);
+    border: none;
+    color: #fff;
+}
+
+/* === Sidebar === */
+.sidebar {
+    background: #1e3a8a;
+    color: #fff;
+    padding-top: 60px;
+}
+
+.sidebar a {
+    display: block;
+    color: #fff;
+    padding: 15px 20px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-radius: 8px;
+    margin: 5px 10px;
+}
+
+.sidebar a:hover,
+.sidebar a.active {
+    background: #2563eb;
+    color: #fff;
+    text-decoration: none;
+}
+
+/* === Footer === */
+footer {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 30px;
+    text-align: center;
+}
+
+/* === Misc === */
+.table-responsive {
+    overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        display: none !important; /* Hide sidebar on mobile */
+    }
+    .main-content {
+        margin-left: 0;
+        padding: 15px;
+    }
+}
+
+
+
+
+
+
+
