@@ -1,26 +1,99 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Zoom Caller ID Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-</head>
-<body>
-  <h1>Zoom Caller ID Update Dashboard</h1>
-  <p>Total Updates: {{ total }}</p>
-  <div id="pieChart" style="width:600px;height:400px;"></div>
+{% extends "base.html" %}
 
-  <script>
-    var data = [{
-      values: [{{ success }}, {{ fail }}],
-      labels: ['Success', 'Fail'],
-      type: 'pie'
-    }];
-    var layout = {title: 'Update Status'};
-    Plotly.newPlot('pieChart', data, layout);
-  </script>
-</body>
-</html>
+{% block title %}Dashboard{% endblock %}
+
+{% block head %}
+<style>
+  .card-text {
+    font-size: 1.5rem;
+    font-weight: bold;
+  }
+  .card-title {
+    font-size: 1rem;
+    color: #0d6efd;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Dashboard</h2>
+
+<div class="row">
+  <div class="col-md-3">
+    <div class="card text-center mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Total Admins</h5>
+        <p class="card-text">{{ total_admin }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Total Users</h5>
+        <p class="card-text">{{ total_users }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Total Actions</h5>
+        <p class="card-text">{{ updates|length }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center mb-3">
+      <div class="card-body">
+        <h5 class="card-title">Successful Updates</h5>
+        <p class="card-text">{{ updates|selectattr("success")|list|length }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">Live Update Report</div>
+  <div class="card-body table-responsive">
+    <table class="table table-striped table-bordered">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Time</th>
+          <th>Action Type</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if updates %}
+          {% for u in updates %}
+            <tr>
+              <td>{{ u.email }}</td>
+              <td>{{ 'Pass' if u.success else 'Fail' }}</td>
+              <td>{{ u.time }}</td>
+              <td>{{ 'Single' if u.type=='S' else 'Bulk' }}</td>
+              <td>{{ u.reason }}</td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="5" class="text-center">No updates yet</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+
+
+
+
+
 
 
 

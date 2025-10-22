@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Manage Users{% endblock %}
+
+{% block content %}
+<h2>Manage Users & Access</h2>
+<div id="alertPlaceholder"></div>
+
+<!-- Add / Update / Delete User with Role -->
+<div class="card mb-3">
+  <div class="card-header">Add / Update / Delete User</div>
+  <div class="card-body">
+    <form method="POST">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-3">
+          <input type="email" name="email" class="form-control" placeholder="user@example.com" required>
+        </div>
+        <div class="col-md-3">
+          <input type="password" name="password" class="form-control" placeholder="Password (for add/update)">
+        </div>
+        <div class="col-md-3">
+          <select name="role" class="form-select">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button type="submit" name="action" value="add" class="btn btn-success">Add</button>
+          <button type="submit" name="action" value="update" class="btn btn-primary">Update</button>
+          <button type="submit" name="action" value="delete" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Current Users & Roles Table with Password -->
+<div class="card">
+  <div class="card-header">Current Users & Roles</div>
+  <div class="card-body table-responsive">
+    <table class="table table-striped table-bordered">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Password</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for email, user in users.items() %}
+          <tr>
+            <td>{{ email }}</td>
+            <td>
+              <form method="POST" action="{{ url_for('update_user_role', email=email) }}">
+                <select name="role" class="form-select form-select-sm" onchange="this.form.submit()">
+                  <option value="user" {% if user.role=='user' %}selected{% endif %}>User</option>
+                  <option value="admin" {% if user.role=='admin' %}selected{% endif %}>Admin</option>
+                </select>
+              </form>
+            </td>
+            <td>
+              <form method="POST" action="{{ url_for('update_user_password', email=email) }}" class="d-flex">
+                <input type="password" name="password" class="form-control form-control-sm me-2" placeholder="{{ user.password }}" required>
+                <button class="btn btn-sm btn-primary" type="submit">Update</button>
+              </form>
+            </td>
+            <td>
+              <form method="POST" action="{{ url_for('delete_user', email=email) }}" style="display:inline">
+                <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

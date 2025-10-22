@@ -1,14 +1,16 @@
 # app.py
-# app.py
 import os
 import time
 import base64
 import requests
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash
 from threading import Lock
 from openpyxl import load_workbook
 from dotenv import load_dotenv
+from functools import wraps
+from datetime import datetime
 
+# Load .env variables
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
@@ -19,16 +21,22 @@ CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
 ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID")
 
-# ---------------- Token cache ----------------
+# ---------------- Token Cache ----------------
 token_cache = {"access_token": None, "expiry": 0}
 token_lock = Lock()
 
-# ---------------- Live report cache ----------------
-report_cache = {"updates": []}  # stores dicts of each update: {email, success: True/False}
+# ---------------- Users (Default Admins) ----------------
+users = {
+    "sanjita.das@blackbox.com": {"password": "Admin@123", "role": "admin"},
+    "rajeev.gupta@blackbox.com": {"password": "Admin@123", "role": "admin"}
+}
+
+# ---------------- Live Report Cache ----------------
+report_cache = {"updates": []}
 
 # ---------------- Helper Functions ----------------
 def generate_access_token():
-    """Step 1: Generate Zoom OAuth token using account-level credentials"""
+    """Generate Zoom access token (account_credentials grant)"""
     with token_lock:
         if token_cache["access_token"] and time.time() < token_cache["expiry"]:
             return token_cache["access_token"]
@@ -36,6 +44,7 @@ def generate_access_token():
         auth_header = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
         url = f"https://zoom.us/oauth/token?grant_type=account_credentials&account_id={ACCOUNT_ID}"
         headers = {"Authorization": f"Basic {auth_header}"}
+
         response = requests.post(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -49,7 +58,7 @@ def get_zoom_headers():
     return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
 def zoom_get_users():
-    """Step 2: Fetch Zoom Phone users"""
+    """Fetch Zoom Phone users"""
     headers = get_zoom_headers()
     url = f"{ZOOM_BASE_URL}/phone/users?page_size=100"
     resp = requests.get(url, headers=headers)
@@ -57,14 +66,15 @@ def zoom_get_users():
     return resp.json().get("users", [])
 
 def get_user_extension_id(email):
-    users = zoom_get_users()
-    for u in users:
+    """Get Zoom user extension_id by email"""
+    users_list = zoom_get_users()
+    for u in users_list:
         if u.get("email", "").lower() == email.lower():
             return u.get("extension_id")
     return None
 
 def get_line_keys(extension_id):
-    """Step 3: Fetch line keys"""
+    """Fetch line keys for a given extension"""
     headers = get_zoom_headers()
     url = f"{ZOOM_BASE_URL}/phone/extension/{extension_id}/line_keys"
     resp = requests.get(url, headers=headers)
@@ -73,109 +83,189 @@ def get_line_keys(extension_id):
     return resp.json().get("line_keys", [])
 
 def patch_line_key(extension_id, line_key_id, new_caller_id):
-    """Step 4: Update outbound caller ID"""
+    """Update outbound caller ID for a line key"""
     headers = get_zoom_headers()
     url = f"{ZOOM_BASE_URL}/phone/extension/{extension_id}/line_keys"
     payload = {
         "line_keys": [
             {
                 "line_key_id": line_key_id,
-                "index": 1,  # or pass real index if needed
+                "index": 1,
                 "outbound_caller_id": new_caller_id
             }
         ]
     }
-    resp = requests.patch(url, headers=headers, json=payload)
-    if resp.status_code in (200, 204):
-        return {"success": True, "line_key_id": line_key_id}
-    else:
-        return {"success": False, "line_key_id": line_key_id, "error": resp.text}
+    try:
+        resp = requests.patch(url, headers=headers, json=payload)
+        if resp.status_code in (200, 204):
+            return True, "Updated"
+        else:
+            return False, resp.text
+    except Exception as e:
+        return False, str(e)
 
-def log_update(email, success):
+def log_update(email, caller_id, success, reason=None, update_type="S"):
     """Store update result for live reporting"""
-    report_cache["updates"].append({"email": email, "success": success})
+    report_cache["updates"].append({
+        "email": email,
+        "caller_id": caller_id,
+        "success": success,   # True or False
+        "reason": reason,
+        "type": update_type,   # 'S' or 'B'
+        "time": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+    })
+
+def login_required(role=None):
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            if "email" not in session:
+                return redirect(url_for("login"))
+            if role and session.get("role") != role:
+                flash("Access denied", "danger")
+                return redirect(url_for("index"))
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+def get_all_zoom_users():
+    try:
+        return zoom_get_users()
+    except Exception:
+        return []
+
+def get_update_report():
+    return report_cache.get("updates", [])
+
 # ---------------- Routes ----------------
+@app.route("/login", methods=["GET","POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email","").lower()
+        password = request.form.get("password","")
+        user = users.get(email)
+        if user and user["password"] == password:
+            session["email"] = email
+            session["role"] = user["role"]
+            flash(f"Logged in as {email}", "success")
+            if user["role"]=="admin":
+                return redirect(url_for("dashboard"))
+            else:
+                return redirect(url_for("index"))
+        flash("Invalid credentials","danger")
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 @app.route("/")
+def home():
+    if "email" in session:
+        return redirect(url_for("dashboard") if session.get("role")=="admin" else url_for("index"))
+    return redirect(url_for("login"))
+
+@app.route("/index")
+@login_required()
 def index():
-    return render_template("index.html")  # your UI template
+    return render_template("index.html", report=get_update_report())
 
+# ---------------- Single Update ----------------
 @app.route("/single_update", methods=["POST"])
+@login_required()
 def single_update():
-    """
-    Form fields:
-    - email
-    - caller_id
-    """
-    email = request.form.get("email", "").strip()
-    caller_id = request.form.get("caller_id", "").strip()
-    if not email or not caller_id:
-        return jsonify({"status": "error", "message": "Email and Caller ID required"}), 400
+    email_updated = request.form.get("email","").strip()
+    caller_id = request.form.get("caller_id","").strip()
+    if not email_updated or not caller_id:
+        return jsonify({"status":"error","message":"Email and Caller ID required"}),400
 
-    ext_id = get_user_extension_id(email)
+    ext_id = get_user_extension_id(email_updated)
     if not ext_id:
-        return jsonify({"status": "error", "message": f"No extension found for {email}"}), 404
+        log_update(email_updated, caller_id, False,"No extension found","S")
+        return jsonify({"status":"error","message":f"No extension found for {email_updated}"}),404
 
     line_keys = get_line_keys(ext_id)
     if not line_keys:
-        return jsonify({"status": "error", "message": f"No line keys found for {email}"}), 404
+        log_update(email_updated, caller_id, False,"No line keys found","S")
+        return jsonify({"status":"error","message":f"No line keys found for {email_updated}"}),404
 
-    results = []
+    results=[]
     for lk in line_keys:
-        success = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-        results.append({
-            "line_key_id": lk.get("line_key_id"),
-            "success": success
-        })
+        current_id = lk.get("key_assignment",{}).get("phone_number","")
+        if current_id == caller_id:
+            log_update(email_updated, caller_id, False,"Caller ID already same","S")
+            results.append({"line_key_id": lk.get("line_key_id"),"success":False,"reason":"Caller ID already same"})
+            continue
+        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
+        log_update(email_updated, caller_id, success, reason,"S")
+        results.append({"line_key_id": lk.get("line_key_id"),"success":success,"reason":reason})
 
-    return jsonify({"status": "success", "email": email, "results": results})
+    # This is correct. Frontend JS will read 'results' to update Report table dynamically
+    return jsonify({"status":"success","email":email_updated,"updated_line_keys":results})
 
+# ---------------- Bulk Update ----------------
 @app.route("/bulk_update", methods=["POST"])
+@login_required()
 def bulk_update():
-    """
-    Excel file with columns: email | caller_id
-    """
     file = request.files.get("excel_file")
     if not file:
-        return jsonify({"status": "error", "message": "Excel file required"}), 400
+        return jsonify({"status":"error","message":"Excel file required"}),400
 
     wb = load_workbook(file)
     sheet = wb.active
-    results = []
-
+    results=[]
     for row in sheet.iter_rows(min_row=1, values_only=True):
-        if not row or len(row) < 2:
-            continue
-        email, caller_id = row
-        if not email or not caller_id:
-            continue
+        if not row or len(row)<2: continue
+        email_updated, caller_id = row
+        if not email_updated or not caller_id: continue
 
-        ext_id = get_user_extension_id(email)
+        ext_id = get_user_extension_id(email_updated)
         if not ext_id:
-            results.append({"email": email, "status": "error", "message": "No extension found"})
+            log_update(email_updated, caller_id, False,"No extension found","B")
+            results.append({"email":email_updated,"status":"fail","reason":"No extension found"})
             continue
 
         line_keys = get_line_keys(ext_id)
         if not line_keys:
-            results.append({"email": email, "status": "error", "message": "No line keys found"})
+            log_update(email_updated, caller_id, False,"No line keys found","B")
+            results.append({"email":email_updated,"status":"fail","reason":"No line keys"})
             continue
 
-        lk_results = []
+        lk_results=[]
         for lk in line_keys:
-            res = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-            lk_results.append(res)
-        results.append({"email": email, "status": "success", "line_keys": lk_results})
+            current_id = lk.get("key_assignment",{}).get("phone_number","")
+            if current_id == caller_id:
+                log_update(email_updated, caller_id, False,"Caller ID already same","B")
+                lk_results.append({"line_key_id":lk.get("line_key_id"),"success":False,"reason":"Caller ID already same"})
+                continue
+            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
+            log_update(email_updated, caller_id, success, reason,"B")
+            lk_results.append({"line_key_id":lk.get("line_key_id"),"success":success,"reason":reason})
 
-    return jsonify({"status": "success", "results": results})
+        results.append({"email":email_updated,"updated_line_keys":lk_results})
 
+    return jsonify({"status":"success","results":results})
+
+# ---------------- Dashboard ----------------
 @app.route("/dashboard")
+@login_required(role="admin")
 def dashboard():
-    """Live report dashboard"""
-    total = len(report_cache["updates"])
-    success_count = sum(1 for u in report_cache["updates"] if u["success"])
-    fail_count = total - success_count
+    total_admin = sum(1 for u in users.values() if u["role"]=="admin")
+    total_users = sum(1 for u in users.values() if u["role"]=="user")
+    total_actions = len(report_cache["updates"])
+    successful_updates = sum(1 for u in report_cache["updates"] if u.get("success"))
+    return render_template(
+        "dashboard.html",
+        total_admin=total_admin,
+        total_users=total_users,
+        total_actions=total_actions,
+        successful_updates=successful_updates,
+        updates=report_cache["updates"]
+    )
 
-    return render_template("dashboard.html", total=total, success=success_count, fail=fail_count)
-@app.route("/refresh_users", methods=["GET"])
+
+@app.route("/refresh_users", methods=["GET","POST"])
+@login_required(role="admin")
 def refresh_users():
     try:
         users = zoom_get_users()
@@ -184,9 +274,67 @@ def refresh_users():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+# ---------------- Manage Users ----------------
+@app.route("/manage_users", methods=["GET","POST"])
+@login_required(role="admin")
+def manage_users():
+    if request.method == "POST":
+        action = request.form.get("action")
+        email = request.form.get("email","").lower()
+        password = request.form.get("password","")
+        role = request.form.get("role","user")
+
+        if action=="add" and email and password:
+            if email in users:
+                flash(f"User {email} already exists", "warning")
+            else:
+                users[email] = {"password": password, "role": role}
+                flash(f"Added user {email}", "success")
+
+        elif action=="update" and email in users:
+            if password:
+                users[email]["password"] = password
+            if role:
+                users[email]["role"] = role
+            flash(f"Updated user {email}", "success")
+
+        elif action=="delete" and email in users:
+            users.pop(email)
+            flash(f"Deleted user {email}", "success")
+        else:
+            flash("Invalid action or user not found", "danger")
+
+    sorted_users = dict(sorted(users.items()))
+    return render_template("manage_users.html", users=sorted_users)
+
+@app.route("/delete_user/<email>", methods=["POST"])
+@login_required(role="admin")
+def delete_user(email):
+    if email in users:
+        users.pop(email)
+        flash(f"Deleted user {email}", "success")
+    return redirect(url_for("manage_users"))
+
+@app.route('/update_user_role/<email>', methods=['POST'])
+def update_user_role(email):
+    role = request.form.get('role')
+    if email in users:
+        users[email]['role'] = role
+        flash(f'Role updated for {email}', 'success')
+    return redirect(url_for('manage_users'))
+
+@app.route("/update_user_password/<email>", methods=["POST"])
+@login_required()
+def update_user_password(email):
+    new_password = request.form.get("password")
+    # implement password update logic
+    flash(f"Password updated for {email}", "success")
+    return redirect(url_for("manage_users"))
+
 # ---------------- Run App ----------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
 
 
 

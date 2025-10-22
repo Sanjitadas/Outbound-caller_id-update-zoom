@@ -1,119 +1,72 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Zoom Phone Caller ID Manager</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <style>
-    .spinner-border-sm { width: 1rem; height: 1rem; border-width: .15em; }
-    pre { white-space: pre-wrap; word-break: break-word; }
-    .table-fixed { table-layout: fixed; word-wrap: break-word; }
-  </style>
-</head>
-<body>
-<div class="container my-4">
-  <h2>Zoom Phone Caller ID Manager</h2>
+{% extends "base.html" %}
 
-  <div id="alertPlaceholder"></div>
+{% block content %}
+<div class="container mt-4">
+  <h2>Outbound Caller ID Update</h2>
 
-  <!-- Single Caller ID Update -->
-  <div class="card mb-3">
-    <div class="card-header">Single Caller ID Update</div>
+  <!-- Single Update Form -->
+  <div class="card mb-4">
+    <div class="card-header">Single Update</div>
     <div class="card-body">
       <form id="singleUpdateForm">
-        <div class="row g-2">
-          <div class="col-md-5">
-            <input type="email" id="email" name="email" class="form-control" placeholder="email@example.com" required>
+        <div class="row">
+          <div class="col-md-5 mb-2">
+            <input type="email" class="form-control" name="email" placeholder="Email ID" required>
           </div>
-          <div class="col-md-4">
-            <input type="text" id="caller_id" name="caller_id" class="form-control" placeholder="+16127780205" required>
+          <div class="col-md-5 mb-2">
+            <input type="text" class="form-control" name="caller_id" placeholder="Caller ID (+E.164)" required>
           </div>
-          <div class="col-md-3">
-            <button id="singleBtn" class="btn btn-primary w-100">
-              <span id="singleSpinner" class="spinner-border spinner-border-sm d-none me-2" role="status"></span>
-              Update Caller ID
-            </button>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-primary w-100">Update</button>
           </div>
         </div>
       </form>
-      <pre id="singleResult" class="mt-2 small"></pre>
     </div>
   </div>
 
-  <!-- Bulk Caller ID Update (Excel) -->
-  <div class="card mb-3">
-    <div class="card-header">Bulk Caller ID Update (Excel)</div>
+  <!-- Bulk Update Form -->
+  <div class="card mb-4">
+    <div class="card-header">Bulk Update (Excel)</div>
     <div class="card-body">
       <form id="bulkUpdateForm" enctype="multipart/form-data">
-        <div class="row g-2">
-          <div class="col-md-8">
-            <input type="file" id="excel_file" name="excel_file" class="form-control" accept=".xlsx" required>
-            <div class="form-text">Excel rows: email,caller_id (no header). Use E.164 format.</div>
+        <div class="row">
+          <div class="col-md-8 mb-2">
+            <input type="file" class="form-control" name="excel_file" accept=".xlsx" required>
           </div>
           <div class="col-md-4">
-            <button id="bulkBtn" class="btn btn-success w-100">
-              <span id="bulkSpinner" class="spinner-border spinner-border-sm d-none me-2" role="status"></span>
-              Start Bulk Update
-            </button>
+            <button type="submit" class="btn btn-success w-100">Update Bulk</button>
           </div>
         </div>
+        <small class="text-muted">Excel rows: email,caller_id (no header)</small>
       </form>
-
-      <div class="mt-3">
-        <div class="progress">
-          <div id="bulkProgress" class="progress-bar" role="progressbar" style="width:0%">0%</div>
-        </div>
-        <pre id="bulkResult" class="mt-2 small"></pre>
-      </div>
     </div>
   </div>
 
-  <!-- Zoom Phone Users Table -->
+  <!-- Update Report Table -->
   <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span>Zoom Phone Users & Caller IDs</span>
-      <div>
-        <button id="refreshBtn" class="btn btn-outline-secondary btn-sm me-2">Refresh</button>
-        <button id="reloadBtn" class="btn btn-outline-secondary btn-sm">Reload Page</button>
-      </div>
-    </div>
-
-    <div class="card-body table-responsive">
-      <table class="table table-striped table-bordered table-fixed" id="usersTable">
+    <div class="card-header">Update Report</div>
+    <div class="card-body">
+      <table class="table table-bordered" id="reportTable">
         <thead>
           <tr>
-            <th>Email</th>
-            <th>Extension Number</th>
-            <th>Extension ID</th>
-            <th>Line Key ID</th>
-            <th>Index</th>
+            <th>Email ID</th>
             <th>Caller ID</th>
-            <th>Display Name</th>
+            <th>Status</th>
+            <th>Reason</th>
+            <th>Time</th>
+            <th>Type</th>
           </tr>
         </thead>
         <tbody>
-          {% for user in zoom_users %}
-            {% if user.line_keys and user.line_keys|length > 0 %}
-              {% for lk in user.line_keys %}
-                <tr data-email="{{ user.email|lower }}">
-                  <td>{{ user.email }}</td>
-                  <td>{{ user.extension_number or '' }}</td>
-                  <td>{{ user.extension_id or user.id }}</td>
-                  <td>{{ lk.line_key_id }}</td>
-                  <td>{{ lk.index }}</td>
-                  <td class="caller-id">{{ lk.outbound_caller_id }}</td>
-                  <td>{{ (lk.key_assignment.display_name if lk.key_assignment) or user.name }}</td>
-                </tr>
-              {% endfor %}
-            {% else %}
-              <tr data-email="{{ user.email|lower }}">
-                <td>{{ user.email }}</td>
-                <td>{{ user.extension_number or '' }}</td>
-                <td>{{ user.extension_id or user.id }}</td>
-                <td colspan="4" class="text-muted">No line keys</td>
-              </tr>
-            {% endif %}
+          {% for u in report %}
+          <tr>
+            <td>{{ u.email }}</td>
+            <td>{{ u.caller_id }}</td>
+            <td>{{ 'Pass' if u.success else 'Fail' }}</td>
+            <td>{{ u.reason }}</td>
+            <td>{{ u.time }}</td>
+            <td>{{ u.type }}</td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -121,165 +74,115 @@
   </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- JS to handle AJAX submission -->
 <script>
-function showAlert(type, html, timeout=4000) {
-  const id = 'a'+Math.random().toString(36).slice(2,9);
-  const el = $('<div id="'+id+'" class="alert alert-'+type+' alert-dismissible fade show" role="alert">'+html+
-               '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>');
-  $('#alertPlaceholder').append(el);
-  if(timeout>0) setTimeout(()=>el.alert('close'), timeout);
-}
+document.addEventListener("DOMContentLoaded", function() {
 
-function refreshUsersOnce() {
-  $('#refreshBtn').prop('disabled', true).text('Refreshing...');
-  $.getJSON('/refresh_users').done(function(data){
-    if(data.status === 'success') {
-      const users = data.zoom_users;
-      let tbody = '';
-      users.forEach(user => {
-        if(user.line_keys && user.line_keys.length>0) {
-          user.line_keys.forEach(lk => {
-            const phone = lk.outbound_caller_id || (lk.key_assignment && lk.key_assignment.phone_number) || '';
-            const display = (lk.key_assignment && lk.key_assignment.display_name) || user.name || '';
-            tbody += `<tr data-email="${(user.email||'').toLowerCase()}">
-              <td>${user.email}</td>
-              <td>${user.extension_number || ''}</td>
-              <td>${user.extension_id || user.id || ''}</td>
-              <td>${lk.line_key_id || ''}</td>
-              <td>${lk.index || ''}</td>
-              <td class="caller-id">${phone}</td>
-              <td>${display}</td>
-            </tr>`;
-          });
-        } else {
-          tbody += `<tr data-email="${(user.email||'').toLowerCase()}">
-            <td>${user.email}</td>
-            <td>${user.extension_number || ''}</td>
-            <td>${user.extension_id || user.id || ''}</td>
-            <td colspan="4" class="text-muted">No line keys</td>
-          </tr>`;
-        }
-      });
-      $('#usersTable tbody').html(tbody);
-    } else {
-      showAlert('danger', 'Failed to refresh: ' + (data.message||'unknown'));
-    }
-  }).fail(function(xhr){
-    showAlert('danger', 'Failed to refresh users: ' + xhr.responseText);
-  }).always(function(){
-    $('#refreshBtn').prop('disabled', false).text('Refresh');
-  });
-}
-
-function updateRowForEmail(email, updated_line_keys) {
-  const selector = `#usersTable tbody tr[data-email="${email.toLowerCase()}"]`;
-  const rows = $(selector);
-  if(rows.length === 0) {
-    refreshUsersOnce();
-    return;
+  // Helper to add row to report table
+  function addReportRow(entry) {
+    const table = document.querySelector("#reportTable tbody");
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${entry.email}</td>
+      <td>${entry.caller_id}</td>
+      <td>${entry.success ? 'Pass' : 'Fail'}</td>
+      <td>${entry.reason || ''}</td>
+      <td>${entry.time || ''}</td>
+      <td>${entry.type || 'S'}</td>
+    `;
+    table.prepend(row); // add on top
   }
-  rows.each(function(index){
-    const lk = updated_line_keys[index];
-    if(lk) {
-      $(this).find('td.caller-id').text(lk.outbound_caller_id || '');
-      $(this).find('td').eq(3).text(lk.line_key_id || '');
-      $(this).find('td').eq(4).text(lk.index || '');
-      $(this).find('td').eq(6).text(lk.display_name || '');
+
+  // Single Update
+  document.querySelector("#singleUpdateForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = form.querySelector("button[type='submit']");
+    submitBtn.disabled = true;             // Disable button
+    submitBtn.classList.add("btn-secondary");
+    submitBtn.classList.remove("btn-primary");
+
+    const formData = new FormData(form);
+
+    try {
+      const res = await fetch("/single_update", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if(data.status === "success" && data.updated_line_keys) {
+        data.updated_line_keys.forEach(lk => {
+          addReportRow({
+            email: data.email,
+            caller_id: formData.get("caller_id"),
+            success: lk.success,
+            reason: lk.reason,
+            time: new Date().toLocaleString(),
+            type: "S"
+          });
+        });
+        form.reset();
+        alert("Single update completed!");
+      } else {
+        alert(data.message || "Error updating Caller ID");
+      }
+    } catch(err) {
+      alert("Network or server error!");
+      console.error(err);
+    } finally {
+      submitBtn.disabled = false;          // Re-enable button
+      submitBtn.classList.add("btn-primary");
+      submitBtn.classList.remove("btn-secondary");
     }
   });
-}
 
-$(document).ready(function(){
-  setTimeout(refreshUsersOnce, 800);
-
-  $('#refreshBtn').on('click', refreshUsersOnce);
-  $('#reloadBtn').on('click', ()=>location.reload());
-
-  $('#singleUpdateForm').on('submit', function(e){
+  // Bulk Update
+  document.querySelector("#bulkUpdateForm").addEventListener("submit", async function(e) {
     e.preventDefault();
-    const email = $('#email').val().trim();
-    const caller_id = $('#caller_id').val().trim();
-    if(!email || !caller_id) { showAlert('warning','Email and Caller ID required'); return; }
+    const form = e.target;
+    const submitBtn = form.querySelector("button[type='submit']");
+    submitBtn.disabled = true;             // Disable button
+    submitBtn.classList.add("btn-secondary");
+    submitBtn.classList.remove("btn-success");
 
-    $('#singleSpinner').removeClass('d-none');
-    $('#singleBtn').prop('disabled', true);
-    $('#singleResult').text('');
+    const formData = new FormData(form);
 
-    $.post('/single_update', { email, caller_id })
-      .done(function(data){
-        if(data.status === 'success') {
-          $('#singleResult').text(JSON.stringify(data, null, 2));
-          showAlert('success', `Update sent for ${email}`);
-          if(data.updated_line_keys && data.updated_line_keys.length>0){
-            updateRowForEmail(email, data.updated_line_keys);
-          } else {
-            refreshUsersOnce();
-          }
-        } else {
-          $('#singleResult').text(JSON.stringify(data, null, 2));
-          showAlert('danger', data.message || 'Update failed');
-        }
-      })
-      .fail(function(xhr){
-        $('#singleResult').text(xhr.responseText || 'Error');
-        showAlert('danger', 'Single update failed');
-      })
-      .always(function(){
-        $('#singleSpinner').addClass('d-none');
-        $('#singleBtn').prop('disabled', false);
-      });
-  });
+    try {
+      const res = await fetch("/bulk_update", { method: "POST", body: formData });
+      const data = await res.json();
 
-  $('#bulkUpdateForm').on('submit', function(e){
-    e.preventDefault();
-    const fd = new FormData(this);
-    $('#bulkSpinner').removeClass('d-none');
-    $('#bulkBtn').prop('disabled', true);
-    $('#bulkResult').text('');
-    $('#bulkProgress').css('width','0%').text('0%');
-
-    $.ajax({
-      url: '/bulk_update',
-      type: 'POST',
-      data: fd,
-      processData: false,
-      contentType: false,
-      xhr: function(){
-        const xhr = new window.XMLHttpRequest();
-        xhr.upload.addEventListener('progress', function(evt){
-          if(evt.lengthComputable){
-            const pc = Math.round((evt.loaded/evt.total)*100);
-            $('#bulkProgress').css('width', pc + '%').text(pc + '%');
-          }
-        }, false);
-        return xhr;
-      },
-      success: function(data){
-        if(data.status === 'success'){
-          $('#bulkResult').text(JSON.stringify(data.results, null, 2));
-          showAlert('success','Bulk update completed');
-          refreshUsersOnce();
-        } else {
-          $('#bulkResult').text(JSON.stringify(data, null, 2));
-          showAlert('danger','Bulk update failed');
-        }
-      },
-      error: function(xhr){
-        $('#bulkResult').text(xhr.responseText || 'Error');
-        showAlert('danger','Bulk update failed');
-      },
-      complete: function(){
-        $('#bulkSpinner').addClass('d-none');
-        $('#bulkBtn').prop('disabled', false);
-        $('#bulkProgress').css('width','100%').text('100%');
+      if(data.status === "success" && data.results) {
+        data.results.forEach(user => {
+          user.updated_line_keys.forEach(lk => {
+            addReportRow({
+              email: user.email,
+              caller_id: lk.phone_number || formData.get("caller_id") || "",
+              success: lk.success,
+              reason: lk.reason,
+              time: new Date().toLocaleString(),
+              type: "B"
+            });
+          });
+        });
+        form.reset();
+        alert("Bulk update completed!");
+      } else {
+        alert(data.message || "Error in bulk update");
       }
-    });
+    } catch(err) {
+      alert("Network or server error!");
+      console.error(err);
+    } finally {
+      submitBtn.disabled = false;          // Re-enable button
+      submitBtn.classList.add("btn-success");
+      submitBtn.classList.remove("btn-secondary");
+    }
   });
+
 });
 </script>
-</body>
-</html>
+
+{% endblock %}
+
+
 
 
 
