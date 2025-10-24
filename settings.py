@@ -54,3 +54,4 @@ logger.addHandler(console_handler)
 logger.info("Settings loaded successfully.")
 
 # ---------------- Zoom API Settings ----------------
+

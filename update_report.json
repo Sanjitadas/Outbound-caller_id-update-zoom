@@ -1,0 +1,186 @@
+[
+  {
+    "email": "rajeev.gupta@blackbox.com",
+    "caller_id": "+12145551234",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "S",
+    "time": "24-Oct-2025 18:50:11"
+  },
+  {
+    "email": "email",
+    "caller_id": "caller_id",
+    "success": false,
+    "reason": "No extension found",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:44"
+  },
+  {
+    "email": "vijeth.kotian@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:47"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:51"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:51"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:51"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:51"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:51"
+  },
+  {
+    "email": "diksha.solanki@blackbox.com",
+    "caller_id": "+18005551237",
+    "success": false,
+    "reason": "Object of type function is not JSON serializable",
+    "type": "B",
+    "time": "24-Oct-2025 18:51:55"
+  },
+  {
+    "email": "rajeev.gupta@blackbox.com",
+    "caller_id": "+16127780205",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "24-Oct-2025 18:54:51"
+  },
+  {
+    "email": "email",
+    "caller_id": "caller_id",
+    "success": false,
+    "reason": "No extension found",
+    "type": "B",
+    "time": "24-Oct-2025 19:05:50"
+  },
+  {
+    "email": "vijeth.kotian@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 19:05:57"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:06"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:09"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:12"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:14"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+18005551230",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:18"
+  },
+  {
+    "email": "diksha.solanki@blackbox.com",
+    "caller_id": "+18005551237",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 19:06:28"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087450",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 20:39:40"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087450",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "24-Oct-2025 20:39:43"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087450",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 20:39:45"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087450",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 20:39:49"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087450",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 20:39:52"
+  }
+]

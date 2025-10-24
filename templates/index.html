@@ -10,10 +10,16 @@
     <div class="card-body">
       <form id="singleUpdateForm">
         <div class="row">
-          <div class="col-md-5 mb-2">
-            <input type="email" class="form-control" name="email" placeholder="Email ID" required>
+          <div class="col-md-3 mb-2">
+            <select class="form-select" name="update_type" id="singleUpdateType">
+              <option value="email" selected>By Email ID</option>
+              <option value="extension_id">By Extension ID</option>
+            </select>
           </div>
-          <div class="col-md-5 mb-2">
+          <div class="col-md-4 mb-2">
+            <input type="text" class="form-control" name="identifier" id="singleIdentifier" placeholder="Email ID or Extension ID" required>
+          </div>
+          <div class="col-md-3 mb-2">
             <input type="text" class="form-control" name="caller_id" placeholder="Caller ID (+E.164)" required>
           </div>
           <div class="col-md-2">
@@ -30,14 +36,20 @@
     <div class="card-body">
       <form id="bulkUpdateForm" enctype="multipart/form-data">
         <div class="row">
-          <div class="col-md-8 mb-2">
+          <div class="col-md-3 mb-2">
+            <select class="form-select" name="update_type" id="bulkUpdateType">
+              <option value="email" selected>By Email ID</option>
+              <option value="extension_id">By Extension ID</option>
+            </select>
+          </div>
+          <div class="col-md-5 mb-2">
             <input type="file" class="form-control" name="excel_file" accept=".xlsx" required>
           </div>
           <div class="col-md-4">
             <button type="submit" class="btn btn-success w-100">Update Bulk</button>
           </div>
         </div>
-        <small class="text-muted">Excel rows: email,caller_id (no header)</small>
+        <small class="text-muted">Excel rows: email,caller_id OR extension_id,caller_id (no header)</small>
       </form>
     </div>
   </div>
@@ -49,7 +61,7 @@
       <table class="table table-bordered" id="reportTable">
         <thead>
           <tr>
-            <th>Email ID</th>
+            <th>Email / Extension ID</th>
             <th>Caller ID</th>
             <th>Status</th>
             <th>Reason</th>
@@ -60,7 +72,7 @@
         <tbody>
           {% for u in report %}
           <tr>
-            <td>{{ u.email }}</td>
+            <td>{{ u.email or u.extension_id }}</td>
             <td>{{ u.caller_id }}</td>
             <td>{{ 'Pass' if u.success else 'Fail' }}</td>
             <td>{{ u.reason }}</td>
@@ -83,7 +95,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const table = document.querySelector("#reportTable tbody");
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${entry.email}</td>
+      <td>${entry.identifier}</td>
       <td>${entry.caller_id}</td>
       <td>${entry.success ? 'Pass' : 'Fail'}</td>
       <td>${entry.reason || ''}</td>
@@ -93,12 +105,12 @@ document.addEventListener("DOMContentLoaded", function() {
     table.prepend(row); // add on top
   }
 
-  // Single Update
+  // Single Update (unchanged)
   document.querySelector("#singleUpdateForm").addEventListener("submit", async function(e) {
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector("button[type='submit']");
-    submitBtn.disabled = true;             // Disable button
+    submitBtn.disabled = true;
     submitBtn.classList.add("btn-secondary");
     submitBtn.classList.remove("btn-primary");
 
@@ -111,7 +123,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.status === "success" && data.updated_line_keys) {
         data.updated_line_keys.forEach(lk => {
           addReportRow({
-            email: data.email,
+            identifier: formData.get("identifier"),
             caller_id: formData.get("caller_id"),
             success: lk.success,
             reason: lk.reason,
@@ -128,59 +140,95 @@ document.addEventListener("DOMContentLoaded", function() {
       alert("Network or server error!");
       console.error(err);
     } finally {
-      submitBtn.disabled = false;          // Re-enable button
+      submitBtn.disabled = false;
       submitBtn.classList.add("btn-primary");
       submitBtn.classList.remove("btn-secondary");
     }
   });
 
-  // Bulk Update
-  document.querySelector("#bulkUpdateForm").addEventListener("submit", async function(e) {
+  // Bulk Update with Progress
+  document.querySelector("#bulkUpdateForm").addEventListener("submit", function(e) {
     e.preventDefault();
     const form = e.target;
     const submitBtn = form.querySelector("button[type='submit']");
-    submitBtn.disabled = true;             // Disable button
+    submitBtn.disabled = true;
     submitBtn.classList.add("btn-secondary");
     submitBtn.classList.remove("btn-success");
 
-    const formData = new FormData(form);
-
-    try {
-      const res = await fetch("/bulk_update", { method: "POST", body: formData });
-      const data = await res.json();
-
-      if(data.status === "success" && data.results) {
-        data.results.forEach(user => {
-          user.updated_line_keys.forEach(lk => {
-            addReportRow({
-              email: user.email,
-              caller_id: lk.phone_number || formData.get("caller_id") || "",
-              success: lk.success,
-              reason: lk.reason,
-              time: new Date().toLocaleString(),
-              type: "B"
-            });
-          });
-        });
-        form.reset();
-        alert("Bulk update completed!");
-      } else {
-        alert(data.message || "Error in bulk update");
-      }
-    } catch(err) {
-      alert("Network or server error!");
-      console.error(err);
-    } finally {
-      submitBtn.disabled = false;          // Re-enable button
-      submitBtn.classList.add("btn-success");
-      submitBtn.classList.remove("btn-secondary");
+    const progressBarContainer = document.querySelector("#bulkProgressContainer");
+    if(!progressBarContainer) {
+      const container = document.createElement("div");
+      container.id = "bulkProgressContainer";
+      container.classList.add("my-2");
+      container.innerHTML = `
+        <div class="progress">
+          <div id="bulkProgress" class="progress-bar" role="progressbar" style="width:0%">0%</div>
+        </div>
+      `;
+      form.parentNode.insertBefore(container, form.nextSibling);
     }
+    const progressBar = document.querySelector("#bulkProgress");
+    progressBar.style.width = "0%";
+    progressBar.textContent = "0%";
+
+    const formData = new FormData(form);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/bulk_update");
+
+    xhr.upload.addEventListener("progress", function(evt) {
+      if(evt.lengthComputable) {
+        const percent = Math.round((evt.loaded / evt.total) * 100);
+        progressBar.style.width = percent + "%";
+        progressBar.textContent = percent + "%";
+      }
+    });
+
+    xhr.onreadystatechange = function() {
+      if(xhr.readyState === 4) {
+        submitBtn.disabled = false;
+        submitBtn.classList.add("btn-success");
+        submitBtn.classList.remove("btn-secondary");
+
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if(data.status === "success" && data.results) {
+            data.results.forEach(user => {
+              user.updated_line_keys.forEach(lk => {
+                addReportRow({
+                  identifier: user.identifier,
+                  caller_id: lk.phone_number || "",
+                  success: lk.success,
+                  reason: lk.reason,
+                  time: new Date().toLocaleString(),
+                  type: "B"
+                });
+              });
+            });
+            alert("Bulk update completed!");
+            form.reset();
+            progressBar.style.width = "100%";
+            progressBar.textContent = "100%";
+          } else {
+            alert(data.message || "Error in bulk update");
+            progressBar.style.width = "0%";
+            progressBar.textContent = "0%";
+          }
+        } catch(err) {
+          alert("Error parsing server response!");
+          console.error(err);
+        }
+      }
+    };
+
+    xhr.send(formData);
   });
 
 });
 </script>
 
+
 {% endblock %}
+
 
 
 

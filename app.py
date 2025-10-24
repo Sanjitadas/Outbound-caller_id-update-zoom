@@ -9,7 +9,11 @@ from openpyxl import load_workbook
 from dotenv import load_dotenv
 from functools import wraps
 from datetime import datetime
+import json
+from init_db import load_users_from_db, save_user_to_db, delete_user_from_db
+import sqlite3
 
+DB_FILE = "caller_id_manager.db"
 # Load .env variables
 load_dotenv()
 app = Flask(__name__)
@@ -26,13 +30,38 @@ token_cache = {"access_token": None, "expiry": 0}
 token_lock = Lock()
 
 # ---------------- Users (Default Admins) ----------------
-users = {
-    "sanjita.das@blackbox.com": {"password": "Admin@123", "role": "admin"},
-    "rajeev.gupta@blackbox.com": {"password": "Admin@123", "role": "admin"}
-}
+users = load_users_from_db()  # load existing users
+# optional: insert default admins if DB empty
+if not users:
+    default_admins = {
+        "sanjita.das@blackbox.com": {"password": "Admin@123", "role": "admin"},
+        "rajeev.gupta@blackbox.com": {"password": "Admin@123", "role": "admin"}
+    }
+    for email, info in default_admins.items():
+        save_user_to_db(email, info["password"], info["role"])
+    users = load_users_from_db()
 
 # ---------------- Live Report Cache ----------------
 report_cache = {"updates": []}
+
+# ---------------- JSON Persistence ----------------
+REPORT_FILE = "update_report.json"
+
+# Load report cache from file on server start
+if os.path.exists(REPORT_FILE):
+    try:
+        with open(REPORT_FILE, "r") as f:
+            report_cache["updates"] = json.load(f)
+    except Exception as e:
+        print("Error loading report cache:", e)
+
+# Save report cache to file
+def save_report():
+    try:
+        with open(REPORT_FILE, "w") as f:
+            json.dump(report_cache["updates"], f, indent=2)
+    except Exception as e:
+        print("Error saving report cache:", e)
 
 # ---------------- Helper Functions ----------------
 def generate_access_token():
@@ -104,17 +133,66 @@ def patch_line_key(extension_id, line_key_id, new_caller_id):
     except Exception as e:
         return False, str(e)
 
+
 def log_update(email, caller_id, success, reason=None, update_type="S"):
-    """Store update result for live reporting"""
-    report_cache["updates"].append({
+    """Store live report in memory, JSON, and SQLite"""
+    entry = {
         "email": email,
         "caller_id": caller_id,
-        "success": success,   # True or False
+        "success": success,
         "reason": reason,
-        "type": update_type,   # 'S' or 'B'
+        "type": update_type,
         "time": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
-    })
+    }
 
+    # Append to in-memory cache
+    report_cache["updates"].append(entry)
+
+    # Persist to JSON
+    save_report()
+
+    # Persist to DB
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO update_logs (identifier, caller_id, success, reason, type, time)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (email, caller_id, success, reason, update_type, entry["time"]))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("Error saving update log to DB:", e)
+
+def get_all_zoom_users():
+    try:
+        return zoom_get_users()
+    except Exception:
+        return []
+
+def get_update_report():
+    return report_cache.get("updates", [])
+
+def get_email_from_extension_id(ext_id):
+    """Reverse lookup email from extension_id if available."""
+    try:
+        user_info = get_user_by_extension(ext_id)
+        return user_info.get("email") if user_info else None
+    except Exception:
+        return None
+
+def save_user_data(email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        INSERT OR REPLACE INTO users
+        (email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name))
+    conn.commit()
+    conn.close()
+
+# ---------------- Login Required Decorator ----------------
 def login_required(role=None):
     def decorator(f):
         @wraps(f)
@@ -127,14 +205,6 @@ def login_required(role=None):
             return f(*args, **kwargs)
         return wrapped
     return decorator
-def get_all_zoom_users():
-    try:
-        return zoom_get_users()
-    except Exception:
-        return []
-
-def get_update_report():
-    return report_cache.get("updates", [])
 
 # ---------------- Routes ----------------
 @app.route("/login", methods=["GET","POST"])
@@ -168,102 +238,52 @@ def home():
 @app.route("/index")
 @login_required()
 def index():
-    return render_template("index.html", report=get_update_report())
+    updates = load_reports_from_db()  # live and persisted
+    return render_template("index.html", report=updates)
 
-# ---------------- Single Update ----------------
-@app.route("/single_update", methods=["POST"])
+
+@app.route("/get_report", methods=["GET"])
 @login_required()
-def single_update():
-    email_updated = request.form.get("email","").strip()
-    caller_id = request.form.get("caller_id","").strip()
-    if not email_updated or not caller_id:
-        return jsonify({"status":"error","message":"Email and Caller ID required"}),400
+def get_report():
+    """Return report to frontend"""
+    return jsonify({"status": "success", "report": get_update_report()})
 
-    ext_id = get_user_extension_id(email_updated)
-    if not ext_id:
-        log_update(email_updated, caller_id, False,"No extension found","S")
-        return jsonify({"status":"error","message":f"No extension found for {email_updated}"}),404
-
-    line_keys = get_line_keys(ext_id)
-    if not line_keys:
-        log_update(email_updated, caller_id, False,"No line keys found","S")
-        return jsonify({"status":"error","message":f"No line keys found for {email_updated}"}),404
-
-    results=[]
-    for lk in line_keys:
-        current_id = lk.get("key_assignment",{}).get("phone_number","")
-        if current_id == caller_id:
-            log_update(email_updated, caller_id, False,"Caller ID already same","S")
-            results.append({"line_key_id": lk.get("line_key_id"),"success":False,"reason":"Caller ID already same"})
-            continue
-        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-        log_update(email_updated, caller_id, success, reason,"S")
-        results.append({"line_key_id": lk.get("line_key_id"),"success":success,"reason":reason})
-
-    # This is correct. Frontend JS will read 'results' to update Report table dynamically
-    return jsonify({"status":"success","email":email_updated,"updated_line_keys":results})
-
-# ---------------- Bulk Update ----------------
-@app.route("/bulk_update", methods=["POST"])
-@login_required()
-def bulk_update():
-    file = request.files.get("excel_file")
-    if not file:
-        return jsonify({"status":"error","message":"Excel file required"}),400
-
-    wb = load_workbook(file)
-    sheet = wb.active
-    results=[]
-    for row in sheet.iter_rows(min_row=1, values_only=True):
-        if not row or len(row)<2: continue
-        email_updated, caller_id = row
-        if not email_updated or not caller_id: continue
-
-        ext_id = get_user_extension_id(email_updated)
-        if not ext_id:
-            log_update(email_updated, caller_id, False,"No extension found","B")
-            results.append({"email":email_updated,"status":"fail","reason":"No extension found"})
-            continue
-
-        line_keys = get_line_keys(ext_id)
-        if not line_keys:
-            log_update(email_updated, caller_id, False,"No line keys found","B")
-            results.append({"email":email_updated,"status":"fail","reason":"No line keys"})
-            continue
-
-        lk_results=[]
-        for lk in line_keys:
-            current_id = lk.get("key_assignment",{}).get("phone_number","")
-            if current_id == caller_id:
-                log_update(email_updated, caller_id, False,"Caller ID already same","B")
-                lk_results.append({"line_key_id":lk.get("line_key_id"),"success":False,"reason":"Caller ID already same"})
-                continue
-            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-            log_update(email_updated, caller_id, success, reason,"B")
-            lk_results.append({"line_key_id":lk.get("line_key_id"),"success":success,"reason":reason})
-
-        results.append({"email":email_updated,"updated_line_keys":lk_results})
-
-    return jsonify({"status":"success","results":results})
+def load_reports_from_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT identifier, caller_id, success, reason, type, time FROM update_logs ORDER BY id DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [
+        {
+            "email": r[0],
+            "caller_id": r[1],
+            "success": bool(r[2]),
+            "reason": r[3],
+            "type": r[4],
+            "time": r[5]
+        }
+        for r in rows
+    ]
 
 # ---------------- Dashboard ----------------
 @app.route("/dashboard")
 @login_required(role="admin")
 def dashboard():
+    updates = load_reports_from_db()
     total_admin = sum(1 for u in users.values() if u["role"]=="admin")
     total_users = sum(1 for u in users.values() if u["role"]=="user")
-    total_actions = len(report_cache["updates"])
-    successful_updates = sum(1 for u in report_cache["updates"] if u.get("success"))
+    total_actions = len(updates)
+    successful_updates = sum(1 for u in updates if u.get("success"))
+
     return render_template(
         "dashboard.html",
         total_admin=total_admin,
         total_users=total_users,
         total_actions=total_actions,
         successful_updates=successful_updates,
-        updates=report_cache["updates"]
+        updates=updates
     )
-
-
 @app.route("/refresh_users", methods=["GET","POST"])
 @login_required(role="admin")
 def refresh_users():
@@ -273,6 +293,137 @@ def refresh_users():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ---------------- Single Update ----------------
+@app.route("/single_update", methods=["POST"])
+@login_required()
+def single_update():
+    update_type = request.form.get("update_type", "email").strip()
+    identifier = request.form.get("identifier", "").strip()
+    caller_id = request.form.get("caller_id", "").strip()
+
+    if not identifier or not caller_id:
+        return jsonify({"status": "error", "message": "Identifier and Caller ID required"}), 400
+
+    # Determine email and extension_id based on selection
+    if update_type == "email":
+        email_updated = identifier
+        ext_id = get_user_extension_id(email_updated)
+    else:
+        ext_id = identifier
+        email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+    if not ext_id:
+        log_update(identifier, caller_id, False, "No extension found", "S")
+        return jsonify({"status": "error", "message": f"No extension found for {identifier}"}), 404
+
+    line_keys = get_line_keys(ext_id)
+    if not line_keys:
+        log_update(identifier, caller_id, False, "No line keys found", "S")
+        return jsonify({"status": "error", "message": f"No line keys found for {identifier}"}), 404
+
+    results = []
+    for lk in line_keys:
+        current_id = lk.get("key_assignment", {}).get("phone_number", "")
+        if current_id == caller_id:
+            log_update(identifier, caller_id, False, "Caller ID already same", "S")
+            results.append({
+                "line_key_id": lk.get("line_key_id"),
+                "success": False,
+                "reason": "Caller ID already same"
+            })
+            continue
+
+        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
+        log_update(identifier, caller_id, success, reason, "S")
+        results.append({
+            "line_key_id": lk.get("line_key_id"),
+            "success": success,
+            "reason": reason
+        })
+
+    return jsonify({
+        "status": "success",
+        "identifier": identifier,
+        "updated_line_keys": results
+    })
+
+# ---------------- Bulk Update ----------------
+@app.route("/bulk_update", methods=["POST"])
+@login_required()
+def bulk_update():
+    update_type = request.form.get("update_type", "email").strip()
+    file = request.files.get("excel_file")
+    if not file:
+        return jsonify({"status": "error", "message": "Excel file required"}), 400
+
+    wb = load_workbook(file)
+    sheet = wb.active
+    results = []
+
+    for row in sheet.iter_rows(min_row=1, values_only=True):
+        if not row or len(row) < 2:
+            continue
+
+        identifier, caller_id = row
+        if not identifier or not caller_id:
+            continue
+
+        identifier = str(identifier).strip()
+        caller_id = str(caller_id).strip()
+
+        # Determine based on selected type
+        if update_type == "email":
+            email_updated = identifier
+            ext_id = get_user_extension_id(email_updated)
+        else:
+            ext_id = identifier
+            email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+        if not ext_id:
+            log_update(identifier, caller_id, False, "No extension found", "B")
+            results.append({
+                "identifier": identifier,
+                "status": "fail",
+                "reason": "No extension found"
+            })
+            continue
+
+        line_keys = get_line_keys(ext_id)
+        if not line_keys:
+            log_update(identifier, caller_id, False, "No line keys found", "B")
+            results.append({
+                "identifier": identifier,
+                "status": "fail",
+                "reason": "No line keys"
+            })
+            continue
+
+        lk_results = []
+        for lk in line_keys:
+            current_id = lk.get("key_assignment", {}).get("phone_number", "")
+            if current_id == caller_id:
+                log_update(identifier, caller_id, False, "Caller ID already same", "B")
+                lk_results.append({
+                    "line_key_id": lk.get("line_key_id"),
+                    "success": False,
+                    "reason": "Caller ID already same"
+                })
+                continue
+
+            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
+            log_update(identifier, caller_id, success, reason, "B")
+            lk_results.append({
+                "line_key_id": lk.get("line_key_id"),
+                "success": success,
+                "reason": reason
+            })
+
+        results.append({
+            "identifier": identifier,
+            "updated_line_keys": lk_results
+        })
+
+    return jsonify({"status": "success", "results": results})
 
 # ---------------- Manage Users ----------------
 @app.route("/manage_users", methods=["GET","POST"])
@@ -284,11 +435,12 @@ def manage_users():
         password = request.form.get("password","")
         role = request.form.get("role","user")
 
-        if action=="add" and email and password:
+        if action == "add" and email and password:
             if email in users:
                 flash(f"User {email} already exists", "warning")
             else:
                 users[email] = {"password": password, "role": role}
+                save_user_to_db(email, password, role)  # persist
                 flash(f"Added user {email}", "success")
 
         elif action=="update" and email in users:
@@ -296,16 +448,18 @@ def manage_users():
                 users[email]["password"] = password
             if role:
                 users[email]["role"] = role
+            save_user_to_db(email, users[email]["password"], users[email]["role"])  # persist
             flash(f"Updated user {email}", "success")
 
         elif action=="delete" and email in users:
             users.pop(email)
+            delete_user_from_db(email)  # persist
             flash(f"Deleted user {email}", "success")
-        else:
-            flash("Invalid action or user not found", "danger")
 
+    # This runs for both GET and POST
     sorted_users = dict(sorted(users.items()))
     return render_template("manage_users.html", users=sorted_users)
+
 
 @app.route("/delete_user/<email>", methods=["POST"])
 @login_required(role="admin")
@@ -327,8 +481,10 @@ def update_user_role(email):
 @login_required()
 def update_user_password(email):
     new_password = request.form.get("password")
-    # implement password update logic
-    flash(f"Password updated for {email}", "success")
+    if email in users:
+        users[email]["password"] = new_password
+        save_user_to_db(email, new_password, users[email]["role"])
+        flash(f"Password updated for {email}", "success")
     return redirect(url_for("manage_users"))
 
 # ---------------- Run App ----------------
