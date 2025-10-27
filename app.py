@@ -3,67 +3,144 @@ import os
 import time
 import base64
 import requests
+import sqlite3
+import json
 from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash
-from threading import Lock
+from threading import Lock, Timer
 from openpyxl import load_workbook
 from dotenv import load_dotenv
 from functools import wraps
-from datetime import datetime
-import json
-from init_db import load_users_from_db, save_user_to_db, delete_user_from_db
-import sqlite3
+from datetime import datetime, timedelta
 
-DB_FILE = "caller_id_manager.db"
-# Load .env variables
+# ---------------- Flask Initialization ----------------
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 
-# ---------------- Configuration ----------------
-ZOOM_BASE_URL = "https://api.zoom.us/v2"
+# ---------------- Config / Paths ----------------
+DB_PATH = os.path.join(os.getcwd(), "zoom_callerid.db")
+REPORT_FILE = os.path.join(os.getcwd(), "update_report.json")
+
+# canonical base URL name
+BASE_URL = os.getenv("ZOOM_BASE_URL", "https://api.zoom.us/v2")
+# alias for older code that used ZOOM_BASE_URL
+ZOOM_BASE_URL = BASE_URL
+
+# Zoom credentials (read from .env)
 CLIENT_ID = os.getenv("ZOOM_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ZOOM_CLIENT_SECRET")
-ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID")
+# Accept either env var name ZOOM_ACCOUNT_ID or ACCOUNT_ID if you used either
+ACCOUNT_ID = os.getenv("ZOOM_ACCOUNT_ID") or os.getenv("ACCOUNT_ID")
 
 # ---------------- Token Cache ----------------
 token_cache = {"access_token": None, "expiry": 0}
 token_lock = Lock()
 
-# ---------------- Users (Default Admins) ----------------
-users = load_users_from_db()  # load existing users
-# optional: insert default admins if DB empty
-if not users:
-    default_admins = {
-        "sanjita.das@blackbox.com": {"password": "Admin@123", "role": "admin"},
-        "rajeev.gupta@blackbox.com": {"password": "Admin@123", "role": "admin"}
-    }
-    for email, info in default_admins.items():
-        save_user_to_db(email, info["password"], info["role"])
-    users = load_users_from_db()
-
-# ---------------- Live Report Cache ----------------
+# ---------------- In-memory report cache (kept in sync with DB) ----------------
 report_cache = {"updates": []}
-
-# ---------------- JSON Persistence ----------------
-REPORT_FILE = "update_report.json"
-
-# Load report cache from file on server start
 if os.path.exists(REPORT_FILE):
     try:
-        with open(REPORT_FILE, "r") as f:
+        with open(REPORT_FILE, "r", encoding="utf-8") as f:
             report_cache["updates"] = json.load(f)
     except Exception as e:
-        print("Error loading report cache:", e)
+        print("Warning: couldn't load report cache:", e)
+        report_cache["updates"] = []
 
-# Save report cache to file
-def save_report():
+def save_report_json():
     try:
-        with open(REPORT_FILE, "w") as f:
-            json.dump(report_cache["updates"], f, indent=2)
+        with open(REPORT_FILE, "w", encoding="utf-8") as f:
+            json.dump(report_cache["updates"], f, indent=2, default=str)
     except Exception as e:
-        print("Error saving report cache:", e)
+        print("Warning: couldn't save report json:", e)
 
-# ---------------- Helper Functions ----------------
+# ---------------- DB Init & helpers ----------------
+def init_db():
+    """Create DB and required tables (safe to call multiple times)."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    # users login table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            password TEXT,
+            role TEXT
+        )
+    ''')
+
+    # caller ID update logs
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS update_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            identifier TEXT,
+            caller_id TEXT,
+            success INTEGER,
+            reason TEXT,
+            type TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # admin activity logs
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS admin_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_email TEXT,
+            action TEXT,
+            target_email TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # login activity to track online/offline
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS login_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT,
+            login_time DATETIME,
+            logout_time DATETIME,
+            status TEXT
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def load_users_from_db():
+    conn = get_db_connection()
+    rows = conn.execute("SELECT email, password, role FROM users").fetchall()
+    conn.close()
+    users = {r["email"].lower(): {"password": r["password"], "role": r["role"]} for r in rows}
+    return users
+
+def save_user_to_db(email, password, role):
+    conn = get_db_connection()
+    conn.execute("INSERT OR REPLACE INTO users (email, password, role) VALUES (?, ?, ?)",
+                 (email.lower(), password, role))
+    conn.commit()
+    conn.close()
+
+def delete_user_from_db(email):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM users WHERE email = ?", (email.lower(),))
+    conn.commit()
+    conn.close()
+
+# Seed default admins if none exist
+_users = load_users_from_db()
+if not _users:
+    save_user_to_db("sanjita.das@blackbox.com", "Admin@123", "admin")
+    save_user_to_db("rajeev.gupta@blackbox.com", "Admin@123", "admin")
+
+# ---------------- Token generation (client_credentials) ----------------
 def generate_access_token():
     """Generate Zoom access token (account_credentials grant)"""
     with token_lock:
@@ -85,7 +162,7 @@ def generate_access_token():
 def get_zoom_headers():
     token = generate_access_token()
     return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-
+# ---------------- Zoom API wrappers ----------------
 def zoom_get_users():
     """Fetch Zoom Phone users"""
     headers = get_zoom_headers()
@@ -134,45 +211,105 @@ def patch_line_key(extension_id, line_key_id, new_caller_id):
         return False, str(e)
 
 
-def log_update(email, caller_id, success, reason=None, update_type="S"):
-    """Store live report in memory, JSON, and SQLite"""
+# ---------------- Logging helpers (DB + JSON) ----------------
+def log_update_db(email, identifier, caller_id, success, reason, type_):
+    conn = get_db_connection()
+    conn.execute(
+        "INSERT INTO update_logs (email, identifier, caller_id, success, reason, type, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (email, identifier, caller_id, int(bool(success)), reason, type_, datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+def log_admin_action_db(admin_email, action, target_email):
+    conn = get_db_connection()
+    conn.execute(
+        "INSERT INTO admin_activity (admin_email, action, target_email, timestamp) VALUES (?, ?, ?, ?)",
+        (admin_email, action, target_email, datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    conn.close()
+
+def append_report_cache(entry):
+    # keep cache ordered newest first (prepend)
+    report_cache["updates"].insert(0, entry)
+    # keep a reasonable limit in JSON cache
+    report_cache["updates"] = report_cache["updates"][:5000]
+    save_report_json()
+
+def log_update(identifier, caller_id, success, reason, type_, updated_by):
+    # write to DB and JSON cache
+    log_update_db(updated_by, identifier, caller_id, success, reason, type_)
     entry = {
-        "email": email,
+        "email": updated_by,
+        "identifier": identifier,
         "caller_id": caller_id,
-        "success": success,
+        "success": bool(success),
         "reason": reason,
-        "type": update_type,
-        "time": datetime.now().strftime("%d-%b-%Y %H:%M:%S")
+        "type": type_,
+        "time": datetime.utcnow().strftime("%d-%b-%Y %H:%M:%S")
     }
+    append_report_cache(entry)
 
-    # Append to in-memory cache
-    report_cache["updates"].append(entry)
+# ---------------- Login activity (online/offline) ----------------
+def log_login(email):
+    conn = get_db_connection()
+    conn.execute(
+        "INSERT INTO login_activity (user_email, login_time, logout_time, status) VALUES (?, ?, ?, ?)",
+        (email.lower(), datetime.utcnow().isoformat(), None, "Online")
+    )
+    conn.commit()
+    conn.close()
 
-    # Persist to JSON
-    save_report()
+def log_logout(email):
+    conn = get_db_connection()
+    # mark last online record as offline
+    conn.execute(
+        "UPDATE login_activity SET logout_time = ?, status = ? WHERE user_email = ? AND status = ?",
+        (datetime.utcnow().isoformat(), "Offline", email.lower(), "Online")
+    )
+    conn.commit()
+    conn.close()
 
-    # Persist to DB
+def get_user_status_list():
+    """Return list of {email, online(bool)} for users in DB (admins + users)."""
+    users = load_users_from_db()
+    conn = get_db_connection()
+    rows = conn.execute("SELECT user_email, status, login_time FROM login_activity ORDER BY id DESC").fetchall()
+    conn.close()
+    status = {}
+    for r in rows:
+        e = r["user_email"].lower()
+        if e not in status:
+            status[e] = {"email": e, "online": (r["status"] == "Online"), "last_seen": r["login_time"]}
+    # include users without login_activity as offline
+    out = []
+    for email, u in users.items():
+        if email in status:
+            out.append({"email": email, "online": bool(status[email]["online"])})
+        else:
+            out.append({"email": email, "online": False})
+    return out
+
+# ---------------- Cleanup old logs (90 days) ----------------
+def cleanup_old_logs():
     try:
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO update_logs (identifier, caller_id, success, reason, type, time)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (email, caller_id, success, reason, update_type, entry["time"]))
+        cutoff = (datetime.utcnow() - timedelta(days=90)).isoformat()
+        conn = get_db_connection()
+        conn.execute("DELETE FROM update_logs WHERE timestamp < ?", (cutoff,))
+        conn.execute("DELETE FROM admin_activity WHERE timestamp < ?", (cutoff,))
+        conn.execute("DELETE FROM login_activity WHERE login_time < ?", (cutoff,))
         conn.commit()
         conn.close()
     except Exception as e:
-        print("Error saving update log to DB:", e)
+        print("cleanup_old_logs error:", e)
+    finally:
+        # schedule next cleanup in 24 hours
+        Timer(24 * 3600, cleanup_old_logs).start()
 
-def get_all_zoom_users():
-    try:
-        return zoom_get_users()
-    except Exception:
-        return []
-
-def get_update_report():
-    return report_cache.get("updates", [])
-
+# start the first cleanup in background
+Timer(5, cleanup_old_logs).start()  # run shortly after startup
+#-------------By extension_id--------------------------------
 def get_email_from_extension_id(ext_id):
     """Reverse lookup email from extension_id if available."""
     try:
@@ -192,108 +329,163 @@ def save_user_data(email, extension_id, extension_number, line_key_id, line_inde
     conn.commit()
     conn.close()
 
+def get_extension_id_from_number(extension_number):
+    """
+    Returns the extension_id from a given extension_number using Zoom API.
+    """
+    url = f"{ZOOM_BASE_URL}/phone/users?page_size=100"
+    headers = {"Authorization": f"Bearer {get_zoom_token()}"}
+    response = requests.get(url, headers=headers)
+    
+    if response.status_code != 200:
+        return None
+
+    data = response.json().get("users", [])
+    for user in data:
+        if str(user.get("extension_number")) == str(extension_number):
+            return user.get("id")
+    return None
+
 # ---------------- Login Required Decorator ----------------
 def login_required(role=None):
-    def decorator(f):
-        @wraps(f)
-        def wrapped(*args, **kwargs):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorated(*args, **kwargs):
             if "email" not in session:
                 return redirect(url_for("login"))
             if role and session.get("role") != role:
                 flash("Access denied", "danger")
-                return redirect(url_for("index"))
-            return f(*args, **kwargs)
-        return wrapped
-    return decorator
+                return redirect(url_for("login"))
+            return fn(*args, **kwargs)
+        return decorated
+    return wrapper
 
-# ---------------- Routes ----------------
-@app.route("/login", methods=["GET","POST"])
+# ------------------- Login -------------------
+@app.route("/", methods=["GET", "POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form.get("email","").lower()
-        password = request.form.get("password","")
-        user = users.get(email)
-        if user and user["password"] == password:
-            session["email"] = email
-            session["role"] = user["role"]
-            flash(f"Logged in as {email}", "success")
-            if user["role"]=="admin":
-                return redirect(url_for("dashboard"))
-            else:
-                return redirect(url_for("index"))
-        flash("Invalid credentials","danger")
+        email = (request.form.get("email") or "").strip().lower()
+        password = (request.form.get("password") or "").strip()
+
+        conn = get_db_connection()
+        row = conn.execute(
+            "SELECT * FROM users WHERE lower(email)=? AND password=?", (email, password)
+        ).fetchone()
+        conn.close()
+
+        if row:
+            session["email"] = row["email"]
+            session["role"] = row["role"]
+
+            # Instead of flashing here, set a flag
+            session["login_success"] = True
+
+            # Log login activity
+            log_login(session["email"])
+
+            # Redirect after login
+            return redirect(url_for("dashboard" if session["role"] == "admin" else "index"))
+        else:
+            flash("Invalid email or password", "danger")
+
     return render_template("login.html")
 
+
 @app.route("/logout")
+@login_required()
 def logout():
+    email = session.get("email")
+    if email:
+        log_logout(email)
     session.clear()
+    flash("Logged out", "info")
     return redirect(url_for("login"))
 
-@app.route("/")
-def home():
-    if "email" in session:
-        return redirect(url_for("dashboard") if session.get("role")=="admin" else url_for("index"))
-    return redirect(url_for("login"))
+@app.route("/dashboard")
+@login_required(role="admin")
+def dashboard():
+    # totals
+    conn = get_db_connection()
+    total_admin = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE role='admin'").fetchone()["cnt"]
+    total_users = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE role='user'").fetchone()["cnt"]
+
+    # last 30 days updates
+    cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    rows = conn.execute("SELECT email, identifier, caller_id, success, reason, type, timestamp FROM update_logs WHERE timestamp >= ? ORDER BY timestamp DESC", (cutoff,)).fetchall()
+    updates = []
+    for r in rows:
+        updates.append({
+            "email": r["email"],
+            "identifier": r["identifier"],
+            "caller_id": r["caller_id"],
+            "success": bool(r["success"]),
+            "reason": r["reason"],
+            "type": r["type"],
+            "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
+        })
+
+    # manage actions (admin_activity) last 30 days
+    mrows = conn.execute("SELECT admin_email, action, target_email, timestamp FROM admin_activity WHERE timestamp >= ? ORDER BY timestamp DESC", (cutoff,)).fetchall()
+    manage_logs = []
+    for r in mrows:
+        manage_logs.append({"email": r["admin_email"], "action": r["action"], "target": r["target_email"], "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")})
+
+    conn.close()
+
+    # online/offline list
+    user_status = get_user_status_list()
+
+    return render_template("dashboard.html",
+                           total_admin=total_admin,
+                           total_users=total_users,
+                           updates=updates,
+                           manage_logs=manage_logs,
+                           user_status=user_status
+                           )
 
 @app.route("/index")
 @login_required()
 def index():
-    updates = load_reports_from_db()  # live and persisted
-    return render_template("index.html", report=updates)
+    # show last 30 days report
+    conn = get_db_connection()
+    cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    rows = conn.execute("SELECT identifier, caller_id, success, reason, type, timestamp FROM update_logs WHERE timestamp >= ? ORDER BY id DESC", (cutoff,)).fetchall()
+    conn.close()
+    report = []
+    for r in rows:
+        report.append({
+            "email": r["identifier"],
+            "caller_id": r["caller_id"],
+            "success": bool(r["success"]),
+            "reason": r["reason"],
+            "type": r["type"],
+            "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
+        })
+    return render_template("index.html", report=report)
 
-
-@app.route("/get_report", methods=["GET"])
+@app.route("/get_report")
 @login_required()
 def get_report():
-    """Return report to frontend"""
-    return jsonify({"status": "success", "report": get_update_report()})
-
-def load_reports_from_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT identifier, caller_id, success, reason, type, time FROM update_logs ORDER BY id DESC")
-    rows = c.fetchall()
+    # returns last-30-days cached JSON (also available in DB)
+    conn = get_db_connection()
+    cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    rows = conn.execute("SELECT identifier, caller_id, success, reason, type, timestamp FROM update_logs WHERE timestamp >= ? ORDER BY id DESC", (cutoff,)).fetchall()
     conn.close()
-    return [
-        {
-            "email": r[0],
-            "caller_id": r[1],
-            "success": bool(r[2]),
-            "reason": r[3],
-            "type": r[4],
-            "time": r[5]
-        }
-        for r in rows
-    ]
-
-# ---------------- Dashboard ----------------
-@app.route("/dashboard")
-@login_required(role="admin")
-def dashboard():
-    updates = load_reports_from_db()
-    total_admin = sum(1 for u in users.values() if u["role"]=="admin")
-    total_users = sum(1 for u in users.values() if u["role"]=="user")
-    total_actions = len(updates)
-    successful_updates = sum(1 for u in updates if u.get("success"))
-
-    return render_template(
-        "dashboard.html",
-        total_admin=total_admin,
-        total_users=total_users,
-        total_actions=total_actions,
-        successful_updates=successful_updates,
-        updates=updates
-    )
-@app.route("/refresh_users", methods=["GET","POST"])
-@login_required(role="admin")
-def refresh_users():
-    try:
-        users = zoom_get_users()
-        return jsonify({"status": "success", "zoom_users": users})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    out = []
+    for r in rows:
+        out.append({
+            "identifier": r["identifier"],
+            "caller_id": r["caller_id"],
+            "success": bool(r["success"]),
+            "reason": r["reason"],
+            "type": r["type"],
+            "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
+        })
+    return jsonify({"status":"success","report":out})
 
 # ---------------- Single Update ----------------
+
 @app.route("/single_update", methods=["POST"])
 @login_required()
 def single_update():
@@ -308,9 +500,17 @@ def single_update():
     if update_type == "email":
         email_updated = identifier
         ext_id = get_user_extension_id(email_updated)
-    else:
+
+    elif update_type == "extension_id":
         ext_id = identifier
         email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+    elif update_type == "extension_number":
+        ext_id = get_extension_id_from_number(identifier)
+        email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+    else:
+        return jsonify({"status": "error", "message": "Invalid update type"}), 400
 
     if not ext_id:
         log_update(identifier, caller_id, False, "No extension found", "S")
@@ -334,7 +534,7 @@ def single_update():
             continue
 
         success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-        log_update(identifier, caller_id, success, reason, "S")
+        log_update(identifier, caller_id, success, reason, "S", session["email"])
         results.append({
             "line_key_id": lk.get("line_key_id"),
             "success": success,
@@ -375,9 +575,17 @@ def bulk_update():
         if update_type == "email":
             email_updated = identifier
             ext_id = get_user_extension_id(email_updated)
-        else:
+
+        elif update_type == "extension_id":
             ext_id = identifier
             email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+        elif update_type == "extension_number":
+            ext_id = get_extension_id_from_number(identifier)
+            email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+        else:
+            continue
 
         if not ext_id:
             log_update(identifier, caller_id, False, "No extension found", "B")
@@ -411,7 +619,7 @@ def bulk_update():
                 continue
 
             success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-            log_update(identifier, caller_id, success, reason, "B")
+            log_update(identifier, caller_id, success, reason, "B", session["email"])
             lk_results.append({
                 "line_key_id": lk.get("line_key_id"),
                 "success": success,
@@ -429,66 +637,86 @@ def bulk_update():
 @app.route("/manage_users", methods=["GET","POST"])
 @login_required(role="admin")
 def manage_users():
+    users = load_users_from_db()
     if request.method == "POST":
         action = request.form.get("action")
-        email = request.form.get("email","").lower()
-        password = request.form.get("password","")
-        role = request.form.get("role","user")
+        email = (request.form.get("email") or "").strip().lower()
+        password = (request.form.get("password") or "").strip()
+        role = (request.form.get("role") or "user").strip()
 
         if action == "add" and email and password:
             if email in users:
                 flash(f"User {email} already exists", "warning")
             else:
-                users[email] = {"password": password, "role": role}
-                save_user_to_db(email, password, role)  # persist
+                save_user_to_db(email, password, role)
+                log_admin_action_db(session.get("email"), "Add", email)
                 flash(f"Added user {email}", "success")
 
-        elif action=="update" and email in users:
+        elif action == "update" and email in users:
+            # allow update of password & role
             if password:
-                users[email]["password"] = password
-            if role:
-                users[email]["role"] = role
-            save_user_to_db(email, users[email]["password"], users[email]["role"])  # persist
+                save_user_to_db(email, password, role)
+            else:
+                # update role only
+                save_user_to_db(email, users[email]["password"], role)
+            log_admin_action_db(session.get("email"), "Update", email)
             flash(f"Updated user {email}", "success")
 
-        elif action=="delete" and email in users:
-            users.pop(email)
-            delete_user_from_db(email)  # persist
+        elif action == "delete" and email in users:
+            delete_user_from_db(email)
+            log_admin_action_db(session.get("email"), "Delete", email)
             flash(f"Deleted user {email}", "success")
 
-    # This runs for both GET and POST
+        users = load_users_from_db()
+
     sorted_users = dict(sorted(users.items()))
     return render_template("manage_users.html", users=sorted_users)
-
 
 @app.route("/delete_user/<email>", methods=["POST"])
 @login_required(role="admin")
 def delete_user(email):
-    if email in users:
-        users.pop(email)
-        flash(f"Deleted user {email}", "success")
+    delete_user_from_db(email)
+    flash(f"Deleted user {email}", "success")
+    log_admin_action_db(session.get("email"), "Delete", email)
     return redirect(url_for("manage_users"))
 
-@app.route('/update_user_role/<email>', methods=['POST'])
+@app.route("/update_user_role/<email>", methods=["POST"])
+@login_required(role="admin")
 def update_user_role(email):
-    role = request.form.get('role')
-    if email in users:
-        users[email]['role'] = role
-        flash(f'Role updated for {email}', 'success')
-    return redirect(url_for('manage_users'))
+    role = request.form.get("role")
+    u = load_users_from_db()
+    if email in u:
+        save_user_to_db(email, u[email]["password"], role)
+        log_admin_action_db(session.get("email"), "Update", email)
+        flash(f"Role updated for {email}", "success")
+    return redirect(url_for("manage_users"))
 
 @app.route("/update_user_password/<email>", methods=["POST"])
-@login_required()
+@login_required(role="admin")
 def update_user_password(email):
-    new_password = request.form.get("password")
-    if email in users:
-        users[email]["password"] = new_password
-        save_user_to_db(email, new_password, users[email]["role"])
+    new_password = (request.form.get("password") or "").strip()
+    u = load_users_from_db()
+    if email in u and new_password:
+        save_user_to_db(email, new_password, u[email]["role"])
+        log_admin_action_db(session.get("email"), "Set Password", email)
         flash(f"Password updated for {email}", "success")
     return redirect(url_for("manage_users"))
 
-# ---------------- Run App ----------------
+# ---------------- Health / Utility ----------------
+@app.route("/refresh_users", methods=["GET"])
+@login_required(role="admin")
+def refresh_users():
+    try:
+        users = zoom_get_users()
+        return jsonify({"status":"success","zoom_users":users})
+    except Exception as e:
+        return jsonify({"status":"error","message":str(e)}), 500
+# ---------------- Run ----------------
 if __name__ == "__main__":
+    # ensure DB created & JSON saved
+    init_db()
+    save_report_json()
+    # run app
     app.run(host="0.0.0.0", port=5000, debug=True)
 
 

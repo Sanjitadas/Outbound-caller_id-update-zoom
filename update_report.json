@@ -1,5 +1,266 @@
 [
   {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "diksha.solanki@blackbox.com",
+    "caller_id": "+1800555128",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:33"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:25"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:23"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:21"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:18"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:15"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "vijeth.kotian@blackbox.com",
+    "caller_id": "+1800555123",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:38:08"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:37:08"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 16:37:06"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:37:02"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "rajeev.gupta@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 16:35:58"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "diksha.solanki@blackbox.com",
+    "caller_id": "+1800555128",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:28:01"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:53"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:51"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:49"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:47"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:44"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "vijeth.kotian@blackbox.com",
+    "caller_id": "+1800555123",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "27-Oct-2025 16:27:37"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:03:10"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 16:03:08"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:03:04"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:01:56"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+13144087452",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 16:01:53"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 16:01:50"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 15:59:29"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 15:59:27"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 15:59:24"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 15:59:21"
+  },
+  {
+    "email": "sanjita.das@blackbox.com",
+    "identifier": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 15:59:18"
+  },
+  {
     "email": "rajeev.gupta@blackbox.com",
     "caller_id": "+12145551234",
     "success": false,
@@ -182,5 +443,253 @@
     "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
     "type": "S",
     "time": "24-Oct-2025 20:39:52"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+12145551234",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:06:21"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+12145551234",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "24-Oct-2025 21:06:25"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+12145551234",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:06:29"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+12145551234",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:06:32"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+12145551234",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:06:34"
+  },
+  {
+    "email": "rajeev.gupta@blackbox.com",
+    "caller_id": "+12145551234",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "24-Oct-2025 21:35:07"
+  },
+  {
+    "email": "vijeth.kotian@blackbox.com",
+    "caller_id": "+1800555123",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:41"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:48"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:51"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:53"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:55"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+1800555129",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "B",
+    "time": "24-Oct-2025 21:36:57"
+  },
+  {
+    "email": "diksha.solanki@blackbox.com",
+    "caller_id": "+1800555128",
+    "success": true,
+    "reason": "Updated",
+    "type": "B",
+    "time": "24-Oct-2025 21:37:04"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:40:40"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "24-Oct-2025 21:40:42"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:40:46"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:40:49"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+12185080286",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "24-Oct-2025 21:40:51"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "No extension found",
+    "type": "S",
+    "time": "24-Oct-2025 21:45:48"
+  },
+  {
+    "email": "uolHR9WySHaIbVx2Hdu1bg",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "No extension found",
+    "type": "S",
+    "time": "24-Oct-2025 21:46:18"
+  },
+  {
+    "email": "7123",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "No line keys found",
+    "type": "S",
+    "time": "27-Oct-2025 19:13:21"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:14:13"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 19:14:16"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:14:18"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "Caller ID already same",
+    "type": "S",
+    "time": "27-Oct-2025 19:14:18"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:14:21"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:23:06"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": true,
+    "reason": "Updated",
+    "type": "S",
+    "time": "27-Oct-2025 19:23:09"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:23:12"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "Caller ID already same",
+    "type": "S",
+    "time": "27-Oct-2025 19:23:12"
+  },
+  {
+    "email": "allain.jovellano@blackbox.com",
+    "caller_id": "+13144087452",
+    "success": false,
+    "reason": "{\"code\":400,\"message\":\"Line key index is empty or duplicated.\"}",
+    "type": "S",
+    "time": "27-Oct-2025 19:23:15"
   }
 ]
