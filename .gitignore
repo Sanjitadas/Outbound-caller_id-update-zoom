@@ -1,0 +1,63 @@
+# -------------------------
+# Python
+# -------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+.venv/
+env/
+ENV/
+
+# IDE / Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.sqlite3
+*.db
+*.bak
+*.tmp
+*.swp
+
+# Reports and cache
+*.json
+*.csv
+*.xlsx
+*.xls
+*.pdf
+*.zip
+*.tar.gz
+
+# Flask / Build
+instance/
+.cache/
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# Node modules (if frontend exists)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -------------------------
+# Environment & secrets
+# -------------------------
+.env
+*.env
+.env.local
+.env.*.local
+
