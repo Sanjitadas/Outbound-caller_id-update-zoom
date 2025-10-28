@@ -490,7 +490,7 @@ def get_report():
         })
     return jsonify({"status":"success","report":out})
 
-# ---------------- Single Update ----------------
+# ---------------- Single Update --------------------------------------------------------------------------------------------------------
 @app.route("/single_update", methods=["POST"])
 @login_required()
 def single_update():
@@ -500,23 +500,33 @@ def single_update():
     if not identifier or not caller_id:
         return jsonify({"status": "error", "message": "Identifier and Caller ID required"}), 400
 
-    # Determine if identifier is email or extension number
-    if "@" in identifier:
+    # ---------------- Determine type ----------------
+    ext_id = None
+    email_updated = None
+
+    if "@" in identifier:  # Email
         email_updated = identifier
         ext_id = get_user_extension_id(email_updated)
-    else:
+
+    elif identifier.isdigit():  # Extension Number
         ext_id = get_extension_id_from_number(identifier)
         email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+    else:  # Treat as Extension ID
+        ext_id = identifier
+        email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
 
     if not ext_id:
         log_update(identifier, caller_id, False, "No extension found", "S", session["email"])
         return jsonify({"status": "error", "message": f"No extension found for {identifier}"}), 404
 
+    # ---------------- Get line keys ----------------
     line_keys = get_line_keys(ext_id)
     if not line_keys:
         log_update(identifier, caller_id, False, "No line keys found", "S", session["email"])
         return jsonify({"status": "error", "message": f"No line keys found for {identifier}"}), 404
 
+    # ---------------- Update caller ID ----------------
     results = []
     for lk in line_keys:
         current_id = lk.get("key_assignment", {}).get("phone_number", "")
@@ -547,6 +557,7 @@ def single_update():
 @app.route("/bulk_update", methods=["POST"])
 @login_required()
 def bulk_update():
+    update_type = request.form.get("update_type", "email").strip()  # Can be "email", "extension_number", "extension_id"
     file = request.files.get("excel_file")
     if not file:
         return jsonify({"status": "error", "message": "Excel file required"}), 400
@@ -566,13 +577,25 @@ def bulk_update():
         identifier = str(identifier).strip()
         caller_id = str(caller_id).strip()
 
-        # Auto-detect email or extension number
-        if "@" in identifier:
+        # Determine extension_id and email based on type
+        ext_id = None
+        email_updated = None
+
+        if update_type == "email":
             email_updated = identifier
             ext_id = get_user_extension_id(email_updated)
-        else:
+
+        elif update_type == "extension_number":
             ext_id = get_extension_id_from_number(identifier)
             email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+        elif update_type == "extension_id":
+            ext_id = identifier
+            email_updated = get_email_from_extension_id(ext_id) or f"ExtID_{identifier}"
+
+        else:
+            results.append({"identifier": identifier, "status": "fail", "reason": "Invalid update type"})
+            continue
 
         if not ext_id:
             log_update(identifier, caller_id, False, "No extension found", "B", session["email"])
