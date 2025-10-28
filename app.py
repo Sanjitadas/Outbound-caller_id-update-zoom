@@ -310,13 +310,16 @@ def cleanup_old_logs():
 # start the first cleanup in background
 Timer(5, cleanup_old_logs).start()  # run shortly after startup
 #-------------By extension_id--------------------------------
-def get_email_from_extension_id(ext_id):
-    """Reverse lookup email from extension_id if available."""
-    try:
-        user_info = get_user_by_extension(ext_id)
-        return user_info.get("email") if user_info else None
-    except Exception:
-        return None
+def get_email_from_extension_id(extension_id):
+    """
+    Returns the email of a Zoom user given their extension_id.
+    """
+    users_list = zoom_get_users()  # Uses your existing zoom_get_users() function
+    for user in users_list:
+        if user.get("extension_id") == extension_id:
+            return user.get("email")
+    return None
+
 
 def save_user_data(email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name):
     conn = sqlite3.connect(DB_FILE)
@@ -333,17 +336,20 @@ def get_extension_id_from_number(extension_number):
     """
     Returns the extension_id from a given extension_number using Zoom API.
     """
+    headers = get_zoom_headers()  # uses your token system
     url = f"{ZOOM_BASE_URL}/phone/users?page_size=100"
-    headers = {"Authorization": f"Bearer {get_zoom_token()}"}
-    response = requests.get(url, headers=headers)
     
-    if response.status_code != 200:
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+    except Exception as e:
+        print("Error fetching users:", e)
         return None
 
-    data = response.json().get("users", [])
-    for user in data:
+    users = response.json().get("users", [])
+    for user in users:
         if str(user.get("extension_number")) == str(extension_number):
-            return user.get("id")
+            return user.get("extension_id")  # Zoom API uses extension_id
     return None
 
 # ---------------- Login Required Decorator ----------------
@@ -485,47 +491,37 @@ def get_report():
     return jsonify({"status":"success","report":out})
 
 # ---------------- Single Update ----------------
-
 @app.route("/single_update", methods=["POST"])
 @login_required()
 def single_update():
-    update_type = request.form.get("update_type", "email").strip()
     identifier = request.form.get("identifier", "").strip()
     caller_id = request.form.get("caller_id", "").strip()
 
     if not identifier or not caller_id:
         return jsonify({"status": "error", "message": "Identifier and Caller ID required"}), 400
 
-    # Determine email and extension_id based on selection
-    if update_type == "email":
+    # Determine if identifier is email or extension number
+    if "@" in identifier:
         email_updated = identifier
         ext_id = get_user_extension_id(email_updated)
-
-    elif update_type == "extension_id":
-        ext_id = identifier
-        email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
-
-    elif update_type == "extension_number":
+    else:
         ext_id = get_extension_id_from_number(identifier)
         email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
 
-    else:
-        return jsonify({"status": "error", "message": "Invalid update type"}), 400
-
     if not ext_id:
-        log_update(identifier, caller_id, False, "No extension found", "S")
+        log_update(identifier, caller_id, False, "No extension found", "S", session["email"])
         return jsonify({"status": "error", "message": f"No extension found for {identifier}"}), 404
 
     line_keys = get_line_keys(ext_id)
     if not line_keys:
-        log_update(identifier, caller_id, False, "No line keys found", "S")
+        log_update(identifier, caller_id, False, "No line keys found", "S", session["email"])
         return jsonify({"status": "error", "message": f"No line keys found for {identifier}"}), 404
 
     results = []
     for lk in line_keys:
         current_id = lk.get("key_assignment", {}).get("phone_number", "")
         if current_id == caller_id:
-            log_update(identifier, caller_id, False, "Caller ID already same", "S")
+            log_update(identifier, caller_id, False, "Caller ID already same", "S", session["email"])
             results.append({
                 "line_key_id": lk.get("line_key_id"),
                 "success": False,
@@ -551,7 +547,6 @@ def single_update():
 @app.route("/bulk_update", methods=["POST"])
 @login_required()
 def bulk_update():
-    update_type = request.form.get("update_type", "email").strip()
     file = request.files.get("excel_file")
     if not file:
         return jsonify({"status": "error", "message": "Excel file required"}), 400
@@ -571,46 +566,30 @@ def bulk_update():
         identifier = str(identifier).strip()
         caller_id = str(caller_id).strip()
 
-        # Determine based on selected type
-        if update_type == "email":
+        # Auto-detect email or extension number
+        if "@" in identifier:
             email_updated = identifier
             ext_id = get_user_extension_id(email_updated)
-
-        elif update_type == "extension_id":
-            ext_id = identifier
-            email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
-
-        elif update_type == "extension_number":
+        else:
             ext_id = get_extension_id_from_number(identifier)
             email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
 
-        else:
-            continue
-
         if not ext_id:
-            log_update(identifier, caller_id, False, "No extension found", "B")
-            results.append({
-                "identifier": identifier,
-                "status": "fail",
-                "reason": "No extension found"
-            })
+            log_update(identifier, caller_id, False, "No extension found", "B", session["email"])
+            results.append({"identifier": identifier, "status": "fail", "reason": "No extension found"})
             continue
 
         line_keys = get_line_keys(ext_id)
         if not line_keys:
-            log_update(identifier, caller_id, False, "No line keys found", "B")
-            results.append({
-                "identifier": identifier,
-                "status": "fail",
-                "reason": "No line keys"
-            })
+            log_update(identifier, caller_id, False, "No line keys found", "B", session["email"])
+            results.append({"identifier": identifier, "status": "fail", "reason": "No line keys"})
             continue
 
         lk_results = []
         for lk in line_keys:
             current_id = lk.get("key_assignment", {}).get("phone_number", "")
             if current_id == caller_id:
-                log_update(identifier, caller_id, False, "Caller ID already same", "B")
+                log_update(identifier, caller_id, False, "Caller ID already same", "B", session["email"])
                 lk_results.append({
                     "line_key_id": lk.get("line_key_id"),
                     "success": False,
@@ -626,10 +605,7 @@ def bulk_update():
                 "reason": reason
             })
 
-        results.append({
-            "identifier": identifier,
-            "updated_line_keys": lk_results
-        })
+        results.append({"identifier": identifier, "updated_line_keys": lk_results})
 
     return jsonify({"status": "success", "results": results})
 
