@@ -24,13 +24,27 @@
       top: 0;
       left: 0;
       background: linear-gradient(180deg, #0d6efd, #0a58ca);
-      padding-top: 60px;
       transition: width 0.3s;
       overflow-x: hidden;
       box-shadow: 2px 0 5px rgba(0,0,0,0.1);
       z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: stretch;
     }
+
     .sidebar:hover { width: 220px; }
+
+    /* Centered Nav Section (slightly shifted up) */
+    .nav-section {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transform: translateY(-30px); /* Slight upward adjustment */
+    }
+
     .sidebar a {
       display: flex;
       align-items: center;
@@ -40,17 +54,20 @@
       font-weight: 500;
       transition: background 0.2s, padding-left 0.2s;
     }
+
     .sidebar a i {
       font-size: 1.3rem;
       margin-right: 10px;
       width: 25px;
       text-align: center;
     }
+
     .sidebar a span {
       white-space: nowrap;
       opacity: 0;
       transition: opacity 0.3s;
     }
+
     .sidebar:hover a span { opacity: 1; }
 
     .sidebar a:hover {
@@ -58,10 +75,28 @@
       border-radius: 5px;
       padding-left: 20px;
     }
+
     .sidebar a.active {
       background-color: rgba(255,255,255,0.3);
       font-weight: 600;
     }
+
+    /* Sidebar Footer (BlackBox Brand) */
+    .sidebar-footer {
+      text-align: center;
+      padding: 15px 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      opacity: 0.9;
+    }
+
+    .sidebar-footer i {
+      margin-right: 6px;
+    }
+
+    .sidebar:hover .sidebar-footer { opacity: 1; }
 
     /* Top-right profile dropdown */
     .top-right-info {
@@ -70,6 +105,7 @@
       right: 20px;
       z-index: 1100;
     }
+
     .profile-btn {
       background: #fff;
       border: none;
@@ -81,10 +117,12 @@
       align-items: center;
       transition: all 0.2s ease;
     }
+
     .profile-btn:hover {
       background-color: #f0f4ff;
       box-shadow: 0 3px 8px rgba(0,0,0,0.15);
     }
+
     .avatar-circle {
       width: 32px;
       height: 32px;
@@ -96,15 +134,15 @@
       justify-content: center;
       font-size: 1.1rem;
     }
+
     .dropdown-menu {
       min-width: 220px;
       border: none;
       padding: 8px 0;
       box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }
-    .dropdown-item:hover {
-      background-color: #f3f6ff;
-    }
+
+    .dropdown-item:hover { background-color: #f3f6ff; }
 
     /* Main content */
     .content {
@@ -121,6 +159,7 @@
       transition: transform 0.2s;
     }
     .card:hover { transform: translateY(-3px); }
+
     .card-header {
       font-weight: 600;
       background-color: #e9f2ff;
@@ -138,6 +177,7 @@
       .content { margin-left: 50px; }
       .sidebar:hover ~ .content { margin-left: 200px; }
       .sidebar a span { display: none; }
+      .nav-section { transform: translateY(-20px); } /* Slightly less shift for mobile */
     }
   </style>
 
@@ -147,21 +187,29 @@
 
 <!-- Sidebar -->
 <div class="sidebar">
-  <a href="{{ url_for('index') }}" class="{% if request.endpoint=='index' %}active{% endif %}">
-    <i class="bi bi-telephone"></i><span>Outbound Caller ID</span>
-  </a>
+  <!-- Centered Nav Items -->
+  <div class="nav-section">
+    <a href="{{ url_for('index') }}" class="{% if request.endpoint=='index' %}active{% endif %}">
+      <i class="bi bi-telephone"></i><span>Outbound Caller ID</span>
+    </a>
 
-  {% if session.role=='admin' %}
-    <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}">
-      <i class="bi bi-speedometer2"></i><span>Dashboard</span>
-    </a>
-    <a href="{{ url_for('manage_users') }}" class="{% if request.endpoint=='manage_users' %}active{% endif %}">
-      <i class="bi bi-people"></i><span>Manage Users</span>
-    </a>
-  {% endif %}
+    {% if session.role=='admin' %}
+      <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}">
+        <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+      </a>
+      <a href="{{ url_for('manage_users') }}" class="{% if request.endpoint=='manage_users' %}active{% endif %}">
+        <i class="bi bi-people"></i><span>Manage Users</span>
+      </a>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar Footer -->
+  <div class="sidebar-footer">
+    <i class="bi bi-cpu"></i><span>BlackBox</span>
+  </div>
 </div>
 
-<!-- Top-right profile dropdown (modern style, fixed) -->
+<!-- Top-right profile dropdown -->
 {% if session.email %}
 <div class="top-right-info dropdown">
   <button class="profile-btn d-flex align-items-center" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false">
@@ -187,7 +235,6 @@
 </div>
 {% endif %}
 
-
 <!-- Main content -->
 <div class="content container-fluid">
   {% block content %}{% endblock %}
@@ -197,9 +244,11 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 {% block scripts %}{% endblock %}
-
 </body>
 </html>
+
+
+
 
 
 
