@@ -12,25 +12,50 @@
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-  .card-primary { background-color: #05041493; color: #fff; }
-  .card-warning { background-color: #05041493; color: #fff; }
-  .card-info { background-color: #05041493; color: #fff; }
-  .card-success { background-color: #05041493; color: #fff; }
+  .card-primary,
+  .card-warning,
+  .card-info,
+  .card-success {
+    background-color: #05041493;
+    color: #fff;
+  }
   .card:hover {
     transform: translateY(-5px);
     transition: all 0.2s ease;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
   }
-  .table thead { background-color: #0d6efd; color: #fff; }
-  .badge { font-weight: 600; }
+  .table thead {
+    background-color: #0d6efd;
+    color: #fff;
+  }
+  .badge {
+    font-weight: 600;
+  }
   .section-title {
     font-weight: 700;
     margin-top: 2rem;
     margin-bottom: 1rem;
     font-size: 1.25rem;
   }
+
+  /* Chart boxes white for contrast */
+  .chart-box {
+    background-color: #ffffff;
+    color: #111827;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+  }
+  .chart-box:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  }
+  .chart-box .card-title {
+    color: #111827;
+    font-weight: 600;
+  }
   canvas {
-    max-height: 220px !important;
+    max-height: 240px !important;
   }
 </style>
 
@@ -73,19 +98,27 @@
 
 <!-- Charts Section -->
 <div class="row g-4 mb-5">
+  <!-- Admin vs User Distribution -->
   <div class="col-md-6">
-    <div class="card p-3 shadow-sm">
-      <h5 class="card-title text-center">Admin vs User Distribution</h5>
-      <canvas id="adminUserChart" height="180"></canvas>
+    <div class="card shadow-sm chart-box p-4 h-100">
+      <h5 class="card-title text-center mb-3">Admin vs User Distribution</h5>
+      <div style="position: relative; height: 240px;">
+        <canvas id="adminUserChart"></canvas>
+      </div>
     </div>
   </div>
+
+  <!-- Action Performance -->
   <div class="col-md-6">
-    <div class="card p-3 shadow-sm">
-      <h5 class="card-title text-center">Action Performance</h5>
-      <div style="position: relative; height: 200px;">
+    <div class="card shadow-sm chart-box p-4 h-100">
+      <h5 class="card-title text-center mb-3">Action Performance</h5>
+      <div style="position: relative; height: 240px;">
         <canvas id="actionPieChart"></canvas>
-        <div id="totalCenterText" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-             font-size:1.1rem;font-weight:600;color:#374151;">Total: {{ updates|length }}</div>
+        <div id="totalCenterText"
+          style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                 font-size:1.2rem;font-weight:700;color:#374151;">
+          Total: {{ updates|length }}
+        </div>
       </div>
     </div>
   </div>
@@ -110,9 +143,20 @@
           {% for u in updates %}
             <tr>
               <td>{{ u.email }}</td>
-              <td>{% if u.success %}<span class="badge bg-success">Pass</span>{% else %}<span class="badge bg-danger">Fail</span>{% endif %}</td>
+              <td>
+                {% if u.success %}
+                  <span class="badge bg-success">Pass</span>
+                {% else %}
+                  <span class="badge bg-danger">Fail</span>
+                {% endif %}
+              </td>
               <td>{{ u.time }}</td>
-              <td>{% if u.type == 'S' %}Single{% elif u.type == 'B' %}Bulk{% elif u.type == 'Both' %}Both{% else %}Unknown{% endif %}</td>
+              <td>
+                {% if u.type == 'S' %}Single
+                {% elif u.type == 'B' %}Bulk
+                {% elif u.type == 'Both' %}Both
+                {% else %}Unknown{% endif %}
+              </td>
               <td>{{ u.reason }}</td>
             </tr>
           {% endfor %}
@@ -135,7 +179,13 @@
           {% for user in user_status %}
             <tr>
               <td>{{ user.email }}</td>
-              <td>{% if user.online %}<span class="badge bg-success">Online</span>{% else %}<span class="badge bg-danger">Offline</span>{% endif %}</td>
+              <td>
+                {% if user.online %}
+                  <span class="badge bg-success">Online</span>
+                {% else %}
+                  <span class="badge bg-danger">Offline</span>
+                {% endif %}
+              </td>
             </tr>
           {% endfor %}
         {% else %}
@@ -234,6 +284,8 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>
 {% endblock %}
+
+
 
 
 
