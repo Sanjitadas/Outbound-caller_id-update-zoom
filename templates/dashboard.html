@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}Dashboard{% endblock %}
 
 {% block head %}
@@ -13,12 +12,13 @@
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-  .card-primary { background-color: #4f46e5; color: #fff; }
-  .card-warning { background-color: #f59e0b; color: #fff; }
-  .card-info { background-color: #3b82f6; color: #fff; }
-  .card-success { background-color: #10b981; color: #fff; }
+  .card-primary { background-color: #05041493; color: #fff; }
+  .card-warning { background-color: #05041493; color: #fff; }
+  .card-info { background-color: #05041493; color: #fff; }
+  .card-success { background-color: #05041493; color: #fff; }
   .card:hover {
     transform: translateY(-5px);
+    transition: all 0.2s ease;
     box-shadow: 0 6px 18px rgba(0,0,0,0.15);
   }
   .table thead { background-color: #0d6efd; color: #fff; }
@@ -29,7 +29,12 @@
     margin-bottom: 1rem;
     font-size: 1.25rem;
   }
+  canvas {
+    max-height: 220px !important;
+  }
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -40,28 +45,48 @@
   <div class="col-md-3">
     <div class="card text-center card-primary p-3">
       <h5 class="card-title">Total Admins</h5>
-      <p class="card-text">{{ total_admin }}</p>
+      <p class="card-text" id="totalAdmins">{{ total_admin }}</p>
     </div>
   </div>
 
   <div class="col-md-3">
     <div class="card text-center card-warning p-3">
       <h5 class="card-title">Total Users</h5>
-      <p class="card-text">{{ total_users }}</p>
+      <p class="card-text" id="totalUsers">{{ total_users }}</p>
     </div>
   </div>
 
   <div class="col-md-3">
     <div class="card text-center card-info p-3">
       <h5 class="card-title">Total Actions</h5>
-      <p class="card-text">{{ updates|length }}</p>
+      <p class="card-text" id="totalActions">{{ updates|length }}</p>
     </div>
   </div>
 
   <div class="col-md-3">
     <div class="card text-center card-success p-3">
       <h5 class="card-title">Successful Updates</h5>
-      <p class="card-text">{{ updates|selectattr("success")|select|list|length }}</p>
+      <p class="card-text" id="successfulUpdates">{{ updates|selectattr("success")|select|list|length }}</p>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-4 mb-5">
+  <div class="col-md-6">
+    <div class="card p-3 shadow-sm">
+      <h5 class="card-title text-center">Admin vs User Distribution</h5>
+      <canvas id="adminUserChart" height="180"></canvas>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 shadow-sm">
+      <h5 class="card-title text-center">Action Performance</h5>
+      <div style="position: relative; height: 200px;">
+        <canvas id="actionPieChart"></canvas>
+        <div id="totalCenterText" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+             font-size:1.1rem;font-weight:600;color:#374151;">Total: {{ updates|length }}</div>
+      </div>
     </div>
   </div>
 </div>
@@ -85,25 +110,9 @@
           {% for u in updates %}
             <tr>
               <td>{{ u.email }}</td>
-              <td>
-                {% if u.success %}
-                  <span class="badge bg-success">Pass</span>
-                {% else %}
-                  <span class="badge bg-danger">Fail</span>
-                {% endif %}
-              </td>
+              <td>{% if u.success %}<span class="badge bg-success">Pass</span>{% else %}<span class="badge bg-danger">Fail</span>{% endif %}</td>
               <td>{{ u.time }}</td>
-              <td>
-                {% if u.type == 'S' %}
-                  Single
-                {% elif u.type == 'B' %}
-                  Bulk
-                {% elif u.type == 'Both' %}
-                  Both
-                {% else %}
-                  Unknown
-                {% endif %}
-              </td>
+              <td>{% if u.type == 'S' %}Single{% elif u.type == 'B' %}Bulk{% elif u.type == 'Both' %}Both{% else %}Unknown{% endif %}</td>
               <td>{{ u.reason }}</td>
             </tr>
           {% endfor %}
@@ -120,24 +129,13 @@
 <div class="card shadow-sm mb-4">
   <div class="card-body table-responsive">
     <table class="table table-striped table-bordered align-middle">
-      <thead>
-        <tr>
-          <th>Email</th>
-          <th>Status</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Email</th><th>Status</th></tr></thead>
       <tbody>
         {% if user_status %}
           {% for user in user_status %}
             <tr>
               <td>{{ user.email }}</td>
-              <td>
-                {% if user.online %}
-                  <span class="badge bg-success">Online</span>
-                {% else %}
-                  <span class="badge bg-danger">Offline</span>
-                {% endif %}
-              </td>
+              <td>{% if user.online %}<span class="badge bg-success">Online</span>{% else %}<span class="badge bg-danger">Offline</span>{% endif %}</td>
             </tr>
           {% endfor %}
         {% else %}
@@ -153,13 +151,7 @@
 <div class="card shadow-sm">
   <div class="card-body table-responsive">
     <table class="table table-striped table-bordered align-middle">
-      <thead>
-        <tr>
-          <th>Email (Admin)</th>
-          <th>Action</th>
-          <th>Time</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Email (Admin)</th><th>Action</th><th>Time</th></tr></thead>
       <tbody>
         {% if manage_logs %}
           {% for log in manage_logs %}
@@ -188,8 +180,63 @@
     </table>
   </div>
 </div>
-
 {% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const totalAdmins = parseInt(document.getElementById("totalAdmins").textContent) || 0;
+  const totalUsers = parseInt(document.getElementById("totalUsers").textContent) || 0;
+  const totalActions = parseInt(document.getElementById("totalActions").textContent) || 0;
+  const successfulUpdates = parseInt(document.getElementById("successfulUpdates").textContent) || 0;
+
+  // Modern Horizontal Bar Chart
+  new Chart(document.getElementById("adminUserChart"), {
+    type: 'bar',
+    data: {
+      labels: ["Admins", "Users"],
+      datasets: [{
+        label: "Count",
+        data: [totalAdmins, totalUsers],
+        backgroundColor: ["#6366f1", "#fbbf24"],
+        borderRadius: 12,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { display: false } },
+        y: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Donut Chart with Total
+  new Chart(document.getElementById("actionPieChart"), {
+    type: 'doughnut',
+    data: {
+      labels: ["Successful", "Failed"],
+      datasets: [{
+        data: [successfulUpdates, totalActions - successfulUpdates],
+        backgroundColor: ["#10b981", "#ef4444"],
+        hoverOffset: 6,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      cutout: "75%",
+      plugins: { legend: { position: "bottom" } }
+    }
+  });
+});
+</script>
+{% endblock %}
+
+
+
 
 
 

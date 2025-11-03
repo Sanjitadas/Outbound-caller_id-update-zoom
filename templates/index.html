@@ -4,26 +4,32 @@
 <div class="container mt-4">
   <h2>Outbound Caller ID Update</h2>
 
-  <!-- Single Update Form -->
+  <!-- SINGLE UPDATE -->
   <div class="card mb-4">
     <div class="card-header">Single Update</div>
     <div class="card-body">
       <form id="singleUpdateForm">
-        <div class="row">
+        <div class="row align-items-end">
           <div class="col-md-3 mb-2">
             <select class="form-select" name="update_type" id="singleUpdateType">
               <option value="email" selected>By Email ID</option>
               <option value="extension_id">By Extension ID</option>
-              <option value="extension_number">Extension Number</option>
+              <option value="extension_number">By Extension Number</option>
             </select>
           </div>
-          <div class="col-md-4 mb-2">
-            <input type="text" class="form-control" name="identifier" id="singleIdentifier" placeholder="Email ID or Extension ID" required>
+          <div class="col-md-3 mb-2">
+            <input type="text" class="form-control" name="identifier" id="singleIdentifier"
+              placeholder="Email ID or Extension" required>
           </div>
           <div class="col-md-3 mb-2">
-            <input type="text" class="form-control" name="caller_id" placeholder="Caller ID (+E.164)" required>
+            <input type="text" class="form-control" name="caller_id" id="caller_id"
+              placeholder="Caller ID (+E.164)" required>
           </div>
-          <div class="col-md-2">
+          <div class="col-md-2 mb-2">
+            <input type="text" class="form-control" name="alias" id="alias"
+              placeholder="Alias (optional)">
+          </div>
+          <div class="col-md-1 mb-2">
             <button type="submit" class="btn btn-primary w-100">Update</button>
           </div>
         </div>
@@ -31,40 +37,44 @@
     </div>
   </div>
 
-  <!-- Bulk Update Form -->
+  <!-- BULK UPDATE -->
   <div class="card mb-4">
     <div class="card-header">Bulk Update (Excel)</div>
     <div class="card-body">
       <form id="bulkUpdateForm" enctype="multipart/form-data">
-        <div class="row">
+        <div class="row align-items-end">
           <div class="col-md-3 mb-2">
             <select class="form-select" name="update_type" id="bulkUpdateType">
               <option value="email" selected>By Email ID</option>
               <option value="extension_id">By Extension ID</option>
-              <option value="extension_number">Extension Number</option>
+              <option value="extension_number">By Extension Number</option>
             </select>
           </div>
           <div class="col-md-5 mb-2">
             <input type="file" class="form-control" name="excel_file" accept=".xlsx" required>
           </div>
-          <div class="col-md-4">
-            <button type="submit" class="btn btn-success w-100">Update Bulk</button>
+          <div class="col-md-4 mb-2">
+            <button type="submit" class="btn btn-success w-100">Bulk Update</button>
           </div>
         </div>
-        <small class="text-muted">Excel rows: email,caller_id OR extension_id,caller_id (no header)</small>
+        <small class="text-muted">
+          Excel format: <b>Email / Ext ID</b>, <b>Caller ID</b>, <b>Alias (optional)</b><br>
+          Example: user@xyz.com,&nbsp;+16127780205,&nbsp;John Desk
+        </small>
       </form>
     </div>
   </div>
 
-  <!-- Update Report Table -->
+  <!-- UPDATE REPORT TABLE -->
   <div class="card">
     <div class="card-header">Update Report</div>
-    <div class="card-body">
-      <table class="table table-bordered" id="reportTable">
-        <thead>
+    <div class="card-body table-responsive">
+      <table class="table table-bordered table-striped" id="reportTable">
+        <thead class="table-dark">
           <tr>
-            <th>Email / Extension ID / Extension Number</th>
+            <th>Email / Extension</th>
             <th>Caller ID</th>
+            <th>Alias</th>
             <th>Status</th>
             <th>Reason</th>
             <th>Time</th>
@@ -76,6 +86,7 @@
           <tr>
             <td>{{ u.email or u.extension_id }}</td>
             <td>{{ u.caller_id }}</td>
+            <td>{{ u.alias or '-' }}</td>
             <td>{{ 'Pass' if u.success else 'Fail' }}</td>
             <td>{{ u.reason }}</td>
             <td>{{ u.time }}</td>
@@ -88,97 +99,90 @@
   </div>
 </div>
 
-<!-- JS to handle AJAX submission -->
+<!-- JS -->
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
-  // Helper to add row to report table
   function addReportRow(entry) {
     const table = document.querySelector("#reportTable tbody");
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${entry.identifier}</td>
       <td>${entry.caller_id}</td>
+      <td>${entry.alias || '-'}</td>
       <td>${entry.success ? 'Pass' : 'Fail'}</td>
       <td>${entry.reason || ''}</td>
       <td>${entry.time || ''}</td>
-      <td>${entry.type || 'S'}</td>
+      <td>${entry.type || ''}</td>
     `;
-    table.prepend(row); // add on top
+    table.prepend(row);
   }
 
-  // Single Update (unchanged)
+  // ---------------- Single Update ----------------
   document.querySelector("#singleUpdateForm").addEventListener("submit", async function(e) {
     e.preventDefault();
     const form = e.target;
-    const submitBtn = form.querySelector("button[type='submit']");
-    submitBtn.disabled = true;
-    submitBtn.classList.add("btn-secondary");
-    submitBtn.classList.remove("btn-primary");
+    const btn = form.querySelector("button[type='submit']");
+    btn.disabled = true;
+    btn.textContent = "Updating...";
 
     const formData = new FormData(form);
+    const aliasValue = formData.get("alias");
 
     try {
       const res = await fetch("/single_update", { method: "POST", body: formData });
       const data = await res.json();
 
-      if(data.status === "success" && data.updated_line_keys) {
+      if (data.status === "success" && data.updated_line_keys) {
         data.updated_line_keys.forEach(lk => {
           addReportRow({
             identifier: formData.get("identifier"),
             caller_id: formData.get("caller_id"),
+            alias: aliasValue,
             success: lk.success,
             reason: lk.reason,
             time: new Date().toLocaleString(),
-            type: "S"
+            type: "Single"
           });
         });
+        alert("Single update completed successfully!");
         form.reset();
-        alert("Single update completed!");
       } else {
-        alert(data.message || "Error updating Caller ID");
+        alert(data.message || "⚠️ Error updating Caller ID");
       }
-    } catch(err) {
-      alert("Network or server error!");
+    } catch (err) {
       console.error(err);
+      alert("❌ Network or Server Error!");
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.classList.add("btn-primary");
-      submitBtn.classList.remove("btn-secondary");
+      btn.disabled = false;
+      btn.textContent = "Update";
     }
   });
 
-  // Bulk Update with Progress
+  // ---------------- Bulk Update ----------------
   document.querySelector("#bulkUpdateForm").addEventListener("submit", function(e) {
     e.preventDefault();
     const form = e.target;
-    const submitBtn = form.querySelector("button[type='submit']");
-    submitBtn.disabled = true;
-    submitBtn.classList.add("btn-secondary");
-    submitBtn.classList.remove("btn-success");
+    const btn = form.querySelector("button[type='submit']");
+    btn.disabled = true;
+    btn.textContent = "Uploading...";
 
-    const progressBarContainer = document.querySelector("#bulkProgressContainer");
-    if(!progressBarContainer) {
-      const container = document.createElement("div");
-      container.id = "bulkProgressContainer";
-      container.classList.add("my-2");
-      container.innerHTML = `
-        <div class="progress">
-          <div id="bulkProgress" class="progress-bar" role="progressbar" style="width:0%">0%</div>
-        </div>
-      `;
-      form.parentNode.insertBefore(container, form.nextSibling);
-    }
+    const progressContainer = document.createElement("div");
+    progressContainer.classList.add("my-3");
+    progressContainer.innerHTML = `
+      <div class="progress">
+        <div id="bulkProgress" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%">0%</div>
+      </div>
+    `;
+    form.parentNode.insertBefore(progressContainer, form.nextSibling);
+
     const progressBar = document.querySelector("#bulkProgress");
-    progressBar.style.width = "0%";
-    progressBar.textContent = "0%";
-
     const formData = new FormData(form);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/bulk_update");
 
-    xhr.upload.addEventListener("progress", function(evt) {
-      if(evt.lengthComputable) {
+    xhr.upload.addEventListener("progress", evt => {
+      if (evt.lengthComputable) {
         const percent = Math.round((evt.loaded / evt.total) * 100);
         progressBar.style.width = percent + "%";
         progressBar.textContent = percent + "%";
@@ -186,50 +190,48 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     xhr.onreadystatechange = function() {
-      if(xhr.readyState === 4) {
-        submitBtn.disabled = false;
-        submitBtn.classList.add("btn-success");
-        submitBtn.classList.remove("btn-secondary");
+      if (xhr.readyState === 4) {
+        btn.disabled = false;
+        btn.textContent = "Bulk Update";
 
         try {
           const data = JSON.parse(xhr.responseText);
-          if(data.status === "success" && data.results) {
+          if (data.status === "success" && data.results) {
             data.results.forEach(user => {
-              user.updated_line_keys.forEach(lk => {
+              (user.updated_line_keys || []).forEach(lk => {
                 addReportRow({
                   identifier: user.identifier,
                   caller_id: lk.phone_number || "",
+                  alias: user.alias || "-",
                   success: lk.success,
                   reason: lk.reason,
                   time: new Date().toLocaleString(),
-                  type: "B"
+                  type: "Bulk"
                 });
               });
             });
-            alert("Bulk update completed!");
-            form.reset();
             progressBar.style.width = "100%";
             progressBar.textContent = "100%";
+            alert("Bulk update completed!");
+            form.reset();
           } else {
-            alert(data.message || "Error in bulk update");
-            progressBar.style.width = "0%";
-            progressBar.textContent = "0%";
+            alert(data.message || "⚠️ Error in bulk update");
           }
-        } catch(err) {
-          alert("Error parsing server response!");
+        } catch (err) {
           console.error(err);
+          alert("❌ Error parsing response from server!");
         }
       }
     };
 
     xhr.send(formData);
   });
-
 });
 </script>
-
-
 {% endblock %}
+
+
+
 
 
 

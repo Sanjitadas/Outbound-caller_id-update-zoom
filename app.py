@@ -75,12 +75,22 @@ def init_db():
             email TEXT,
             identifier TEXT,
             caller_id TEXT,
+            alias TEXT,
             success INTEGER,
             reason TEXT,
             type TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # 🔹 Ensure alias column exists for backward compatibility
+    try:
+        c.execute("PRAGMA table_info(update_logs)")
+        columns = [row[1] for row in c.fetchall()]
+        if "alias" not in columns:
+            c.execute("ALTER TABLE update_logs ADD COLUMN alias TEXT")
+            print("✅ Added missing 'alias' column to update_logs table")
+    except Exception as e:
+        print("⚠️ Error checking or adding alias column:", e)
 
     # admin activity logs
     c.execute('''
@@ -188,10 +198,11 @@ def get_line_keys(extension_id):
         return []
     return resp.json().get("line_keys", [])
 
-def patch_line_key(extension_id, line_key_id, new_caller_id):
-    """Update outbound caller ID for a line key"""
+def patch_line_key(extension_id, line_key_id, new_caller_id, alias=None):
+    """Update outbound caller ID and alias for a line key."""
     headers = get_zoom_headers()
     url = f"{ZOOM_BASE_URL}/phone/extension/{extension_id}/line_keys"
+
     payload = {
         "line_keys": [
             {
@@ -201,6 +212,11 @@ def patch_line_key(extension_id, line_key_id, new_caller_id):
             }
         ]
     }
+
+    # If alias provided, include it
+    if alias:
+        payload["line_keys"][0]["alias"] = alias
+
     try:
         resp = requests.patch(url, headers=headers, json=payload)
         if resp.status_code in (200, 204):
@@ -210,14 +226,13 @@ def patch_line_key(extension_id, line_key_id, new_caller_id):
     except Exception as e:
         return False, str(e)
 
-
 # ---------------- Logging helpers (DB + JSON) ----------------
-def log_update_db(email, identifier, caller_id, success, reason, type_):
+def log_update_db(email, identifier, caller_id, success, reason, type_, alias=None):
     conn = get_db_connection()
-    conn.execute(
-        "INSERT INTO update_logs (email, identifier, caller_id, success, reason, type, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (email, identifier, caller_id, int(bool(success)), reason, type_, datetime.utcnow().isoformat())
-    )
+    conn.execute("""
+        INSERT INTO update_logs (email, identifier, caller_id, alias, success, reason, type, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (email, identifier, caller_id, alias, int(bool(success)), reason, type_, datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()
 
@@ -237,13 +252,13 @@ def append_report_cache(entry):
     report_cache["updates"] = report_cache["updates"][:5000]
     save_report_json()
 
-def log_update(identifier, caller_id, success, reason, type_, updated_by):
-    # write to DB and JSON cache
-    log_update_db(updated_by, identifier, caller_id, success, reason, type_)
+def log_update(identifier, caller_id, success, reason, type_, updated_by, alias=None):
+    log_update_db(updated_by, identifier, caller_id, success, reason, type_, alias)
     entry = {
         "email": updated_by,
         "identifier": identifier,
         "caller_id": caller_id,
+        "alias": alias or "-",
         "success": bool(success),
         "reason": reason,
         "type": type_,
@@ -321,17 +336,6 @@ def get_email_from_extension_id(extension_id):
     return None
 
 
-def save_user_data(email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''
-        INSERT OR REPLACE INTO users
-        (email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (email, extension_id, extension_number, line_key_id, line_index, caller_id, display_name))
-    conn.commit()
-    conn.close()
-
 def get_extension_id_from_number(extension_number):
     """
     Returns the extension_id from a given extension_number using Zoom API.
@@ -407,18 +411,24 @@ def logout():
     session.clear()
     flash("Logged out", "info")
     return redirect(url_for("login"))
-
 @app.route("/dashboard")
 @login_required(role="admin")
 def dashboard():
-    # totals
     conn = get_db_connection()
+
+    # Totals
     total_admin = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE role='admin'").fetchone()["cnt"]
     total_users = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE role='user'").fetchone()["cnt"]
 
-    # last 30 days updates
+    # Last 30 days updates
     cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
-    rows = conn.execute("SELECT email, identifier, caller_id, success, reason, type, timestamp FROM update_logs WHERE timestamp >= ? ORDER BY timestamp DESC", (cutoff,)).fetchall()
+    rows = conn.execute("""
+        SELECT email, identifier, caller_id, success, reason, type, timestamp 
+        FROM update_logs 
+        WHERE timestamp >= ? 
+        ORDER BY timestamp DESC
+    """, (cutoff,)).fetchall()
+
     updates = []
     for r in rows:
         updates.append({
@@ -431,24 +441,39 @@ def dashboard():
             "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
         })
 
-    # manage actions (admin_activity) last 30 days
-    mrows = conn.execute("SELECT admin_email, action, target_email, timestamp FROM admin_activity WHERE timestamp >= ? ORDER BY timestamp DESC", (cutoff,)).fetchall()
+    # Manage actions (admin_activity)
+    mrows = conn.execute("""
+        SELECT admin_email, action, target_email, timestamp 
+        FROM admin_activity 
+        WHERE timestamp >= ? 
+        ORDER BY timestamp DESC
+    """, (cutoff,)).fetchall()
+
     manage_logs = []
     for r in mrows:
-        manage_logs.append({"email": r["admin_email"], "action": r["action"], "target": r["target_email"], "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")})
+        manage_logs.append({
+            "email": r["admin_email"],
+            "action": r["action"],
+            "target": r["target_email"],
+            "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
+        })
 
     conn.close()
 
-    # online/offline list
     user_status = get_user_status_list()
 
-    return render_template("dashboard.html",
-                           total_admin=total_admin,
-                           total_users=total_users,
-                           updates=updates,
-                           manage_logs=manage_logs,
-                           user_status=user_status
-                           )
+    # Auto-refresh logic
+    refresh_needed = session.pop("refresh_needed", False)
+
+    return render_template(
+        "dashboard.html",
+        total_admin=total_admin,
+        total_users=total_users,
+        updates=updates,
+        manage_logs=manage_logs,
+        user_status=user_status,
+        refresh_needed=refresh_needed
+    )
 
 @app.route("/index")
 @login_required()
@@ -489,13 +514,14 @@ def get_report():
             "time": datetime.fromisoformat(r["timestamp"]).strftime("%d-%b-%Y %H:%M:%S")
         })
     return jsonify({"status":"success","report":out})
-
-# ---------------- Single Update --------------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------single update-------------------------------------------------------------------
 @app.route("/single_update", methods=["POST"])
 @login_required()
 def single_update():
     identifier = request.form.get("identifier", "").strip()
     caller_id = request.form.get("caller_id", "").strip()
+    alias = request.form.get("alias", "").strip() or None
+    update_type = request.form.get("update_type", "email").strip()
 
     if not identifier or not caller_id:
         return jsonify({"status": "error", "message": "Identifier and Caller ID required"}), 400
@@ -504,17 +530,21 @@ def single_update():
     ext_id = None
     email_updated = None
 
-    if "@" in identifier:  # Email
+    if update_type == "email":
         email_updated = identifier
         ext_id = get_user_extension_id(email_updated)
 
-    elif identifier.isdigit():  # Extension Number
+    elif update_type == "extension_number":
         ext_id = get_extension_id_from_number(identifier)
         email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
 
-    else:  # Treat as Extension ID
+    elif update_type == "extension_id":
         ext_id = identifier
         email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+    else:
+        log_update(identifier, caller_id, False, "Invalid update type", "S", session["email"])
+        return jsonify({"status": "error", "message": "Invalid update type"}), 400
 
     if not ext_id:
         log_update(identifier, caller_id, False, "No extension found", "S", session["email"])
@@ -531,18 +561,20 @@ def single_update():
     for lk in line_keys:
         current_id = lk.get("key_assignment", {}).get("phone_number", "")
         if current_id == caller_id:
-            log_update(identifier, caller_id, False, "Caller ID already same", "S", session["email"])
+            log_update(identifier, caller_id, False, "Caller ID already same", "S", session["email"], alias)
             results.append({
                 "line_key_id": lk.get("line_key_id"),
+                "caller_id": caller_id,
                 "success": False,
                 "reason": "Caller ID already same"
             })
             continue
 
-        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-        log_update(identifier, caller_id, success, reason, "S", session["email"])
+        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
+        log_update(identifier, caller_id, success, reason, "S", session["email"], alias)
         results.append({
             "line_key_id": lk.get("line_key_id"),
+            "caller_id": caller_id,
             "success": success,
             "reason": reason
         })
@@ -550,14 +582,15 @@ def single_update():
     return jsonify({
         "status": "success",
         "identifier": identifier,
+        "alias": alias or "-",
         "updated_line_keys": results
     })
 
-# ---------------- Bulk Update ----------------
+# ---------------- Bulk Update --------------------------------------------------------------------------------------------------------
 @app.route("/bulk_update", methods=["POST"])
 @login_required()
 def bulk_update():
-    update_type = request.form.get("update_type", "email").strip()  # Can be "email", "extension_number", "extension_id"
+    update_type = request.form.get("update_type", "email").strip()
     file = request.files.get("excel_file")
     if not file:
         return jsonify({"status": "error", "message": "Excel file required"}), 400
@@ -570,14 +603,20 @@ def bulk_update():
         if not row or len(row) < 2:
             continue
 
-        identifier, caller_id = row
+        # Handle optional alias (3rd column)
+        if len(row) >= 3:
+            identifier, caller_id, alias = row[0], row[1], row[2]
+        else:
+            identifier, caller_id, alias = row[0], row[1], None
+
         if not identifier or not caller_id:
             continue
 
         identifier = str(identifier).strip()
         caller_id = str(caller_id).strip()
+        alias = str(alias).strip() if alias else None
 
-        # Determine extension_id and email based on type
+        # ---------------- Determine type ----------------
         ext_id = None
         email_updated = None
 
@@ -598,37 +637,44 @@ def bulk_update():
             continue
 
         if not ext_id:
-            log_update(identifier, caller_id, False, "No extension found", "B", session["email"])
-            results.append({"identifier": identifier, "status": "fail", "reason": "No extension found"})
+            log_update(identifier, caller_id, False, "No extension found", "B", session["email"], alias)
+            results.append({"identifier": identifier, "alias": alias, "status": "fail", "reason": "No extension found"})
             continue
 
         line_keys = get_line_keys(ext_id)
         if not line_keys:
-            log_update(identifier, caller_id, False, "No line keys found", "B", session["email"])
-            results.append({"identifier": identifier, "status": "fail", "reason": "No line keys"})
+            log_update(identifier, caller_id, False, "No line keys found", "B", session["email"], alias)
+            results.append({"identifier": identifier, "alias": alias, "status": "fail", "reason": "No line keys"})
             continue
 
+        # ---------------- Update caller ID and alias ----------------
         lk_results = []
         for lk in line_keys:
             current_id = lk.get("key_assignment", {}).get("phone_number", "")
             if current_id == caller_id:
-                log_update(identifier, caller_id, False, "Caller ID already same", "B", session["email"])
+                log_update(identifier, caller_id, False, "Caller ID already same", "B", session["email"], alias)
                 lk_results.append({
                     "line_key_id": lk.get("line_key_id"),
+                    "caller_id": caller_id,
                     "success": False,
                     "reason": "Caller ID already same"
                 })
                 continue
 
-            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id)
-            log_update(identifier, caller_id, success, reason, "B", session["email"])
+            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
+            log_update(identifier, caller_id, success, reason, "B", session["email"], alias)
             lk_results.append({
                 "line_key_id": lk.get("line_key_id"),
+                "caller_id": caller_id,
                 "success": success,
                 "reason": reason
             })
 
-        results.append({"identifier": identifier, "updated_line_keys": lk_results})
+        results.append({
+            "identifier": identifier,
+            "alias": alias or "-",
+            "updated_line_keys": lk_results
+        })
 
     return jsonify({"status": "success", "results": results})
 
