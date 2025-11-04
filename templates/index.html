@@ -30,7 +30,7 @@
               placeholder="Alias (optional)">
           </div>
           <div class="col-md-1 mb-2">
-            <button type="submit" class="btn btn-primary w-100">Update</button>
+            <button type="submit" id="singleUpdateBtn" class="btn btn-primary w-100">Update</button>
           </div>
         </div>
       </form>
@@ -54,7 +54,7 @@
             <input type="file" class="form-control" name="excel_file" accept=".xlsx" required>
           </div>
           <div class="col-md-4 mb-2">
-            <button type="submit" class="btn btn-success w-100">Bulk Update</button>
+            <button type="submit" id="bulkUpdateBtn" class="btn btn-success w-100">Bulk Update</button>
           </div>
         </div>
         <small class="text-muted">
@@ -101,7 +101,7 @@
 
 <!-- JS -->
 <script>
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
 
   function addReportRow(entry) {
     const table = document.querySelector("#reportTable tbody");
@@ -118,17 +118,22 @@ document.addEventListener("DOMContentLoaded", function() {
     table.prepend(row);
   }
 
-  // ---------------- Single Update ----------------
-  document.querySelector("#singleUpdateForm").addEventListener("submit", async function(e) {
+  // -------- Single Update --------
+  document.querySelector("#singleUpdateForm").addEventListener("submit", async function (e) {
     e.preventDefault();
     const form = e.target;
-    const btn = form.querySelector("button[type='submit']");
+    const btn = document.getElementById("singleUpdateBtn");
+
+    if (!confirm("Single Update is now processing. Click OK to continue...")) return;
+
     btn.disabled = true;
-    btn.textContent = "Updating...";
+    btn.classList.remove("btn-primary");
+    btn.classList.add("btn-secondary");
+    btn.innerHTML = `
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...
+    `;
 
     const formData = new FormData(form);
-    const aliasValue = formData.get("alias");
-
     try {
       const res = await fetch("/single_update", { method: "POST", body: formData });
       const data = await res.json();
@@ -138,14 +143,14 @@ document.addEventListener("DOMContentLoaded", function() {
           addReportRow({
             identifier: formData.get("identifier"),
             caller_id: formData.get("caller_id"),
-            alias: aliasValue,
+            alias: formData.get("alias"),
             success: lk.success,
             reason: lk.reason,
             time: new Date().toLocaleString(),
             type: "Single"
           });
         });
-        alert("Single update completed successfully!");
+        showPopup("✅ Update Completed Successfully!");
         form.reset();
       } else {
         alert(data.message || "⚠️ Error updating Caller ID");
@@ -154,18 +159,24 @@ document.addEventListener("DOMContentLoaded", function() {
       console.error(err);
       alert("❌ Network or Server Error!");
     } finally {
-      btn.disabled = false;
-      btn.textContent = "Update";
+      resetButton(btn, "Update", "btn-primary");
     }
   });
 
-  // ---------------- Bulk Update ----------------
-  document.querySelector("#bulkUpdateForm").addEventListener("submit", function(e) {
+  // -------- Bulk Update --------
+  document.querySelector("#bulkUpdateForm").addEventListener("submit", function (e) {
     e.preventDefault();
     const form = e.target;
-    const btn = form.querySelector("button[type='submit']");
+    const btn = document.getElementById("bulkUpdateBtn");
+
+    if (!confirm("Bulk Update is now processing. Click OK to continue...")) return;
+
     btn.disabled = true;
-    btn.textContent = "Uploading...";
+    btn.classList.remove("btn-success");
+    btn.classList.add("btn-secondary");
+    btn.innerHTML = `
+      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...
+    `;
 
     const progressContainer = document.createElement("div");
     progressContainer.classList.add("my-3");
@@ -189,10 +200,9 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
 
-    xhr.onreadystatechange = function() {
+    xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
-        btn.disabled = false;
-        btn.textContent = "Bulk Update";
+        resetButton(btn, "Bulk Update", "btn-success");
 
         try {
           const data = JSON.parse(xhr.responseText);
@@ -212,7 +222,7 @@ document.addEventListener("DOMContentLoaded", function() {
             });
             progressBar.style.width = "100%";
             progressBar.textContent = "100%";
-            alert("Bulk update completed!");
+            showPopup("✅ Bulk Update Completed Successfully!");
             form.reset();
           } else {
             alert(data.message || "⚠️ Error in bulk update");
@@ -226,33 +236,51 @@ document.addEventListener("DOMContentLoaded", function() {
 
     xhr.send(formData);
   });
+
+  // ------- Helper: Reset Button -------
+  function resetButton(btn, text, styleClass) {
+    btn.disabled = false;
+    btn.classList.remove("btn-secondary");
+    btn.classList.add(styleClass);
+    btn.innerHTML = text;
+  }
+
+  // ------- Helper: Success Popup -------
+  function showPopup(msg) {
+    const popup = document.createElement("div");
+    popup.textContent = msg;
+    popup.style.position = "fixed";
+    popup.style.top = "20px";
+    popup.style.right = "20px";
+    popup.style.background = "#10b981";
+    popup.style.color = "white";
+    popup.style.padding = "12px 18px";
+    popup.style.borderRadius = "8px";
+    popup.style.fontWeight = "600";
+    popup.style.zIndex = "2000";
+    popup.style.boxShadow = "0 4px 10px rgba(0,0,0,0.2)";
+    document.body.appendChild(popup);
+    setTimeout(() => popup.remove(), 4000);
+  }
 });
 </script>
 
-<!--  Real-time Update Listener -->
+<!-- Real-time SSE Update Listener -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   if (!!window.EventSource) {
     const source = new EventSource("/events");
-
     source.onmessage = function (event) {
       const data = JSON.parse(event.data);
-      console.log("🔔 New real-time update received:", data);
-
-      if (typeof addReportRow === "function") {
-        addReportRow(data);
-      }
+      console.log("🔔 SSE Update:", data);
+      if (typeof addReportRow === "function") addReportRow(data);
     };
-
-    source.onerror = function (err) {
-      console.error("SSE connection failed:", err);
-    };
-  } else {
-    console.warn("❌ Your browser does not support real-time updates.");
+    source.onerror = err => console.error("SSE connection failed:", err);
   }
 });
 </script>
 {% endblock %}
+
 
 
 

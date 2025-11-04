@@ -13,12 +13,26 @@ from functools import wraps
 from datetime import datetime, timedelta
 from utils.task_queue import add_task
 import queue
-
+import logging
+from logging.handlers import RotatingFileHandler
 # ---------------- Flask Initialization ----------------
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET", "supersecretkey")
 
+# === Rotating File Logs Setup ===
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+log_file = 'logs/app.log'
+file_handler = RotatingFileHandler(log_file, maxBytes=5 * 1024 * 1024, backupCount=10)
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+
+# Attach logger to Flask app
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
 # ---------------- Config / Paths ----------------
 DB_PATH = os.path.join(os.getcwd(), "zoom_callerid.db")
 REPORT_FILE = os.path.join(os.getcwd(), "update_report.json")
@@ -145,6 +159,23 @@ def delete_user_from_db(email):
     conn.execute("DELETE FROM users WHERE email = ?", (email.lower(),))
     conn.commit()
     conn.close()
+# --- Online/Offline status helper ---
+def get_online_status():
+    conn = get_db_connection()
+    rows = conn.execute("""
+        SELECT u.email,
+               CASE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM login_activity la 
+                        WHERE la.user_email = u.email AND la.status = 'Online'
+                    ) THEN 'Online'
+                    ELSE 'Offline'
+               END AS status
+        FROM users u
+        ORDER BY u.email
+    """).fetchall()
+    conn.close()
+    return rows
 
 # Seed default admins if none exist
 _users = load_users_from_db()
@@ -474,13 +505,16 @@ def login_required(role=None):
         @wraps(fn)
         def decorated(*args, **kwargs):
             if "email" not in session:
+                app.logger.warning("Unauthorized access attempt to protected route.")
                 return redirect(url_for("login"))
             if role and session.get("role") != role:
+                app.logger.warning(f"Access denied for user {session.get('email')} - insufficient role.")
                 flash("Access denied", "danger")
                 return redirect(url_for("login"))
             return fn(*args, **kwargs)
         return decorated
     return wrapper
+
 
 # ------------------- Login -------------------
 @app.route("/", methods=["GET", "POST"])
@@ -496,33 +530,49 @@ def login():
         ).fetchone()
         conn.close()
 
+        # Log every login attempt
+        app.logger.info(f"Login attempt for: {email}")
+
         if row:
             session["email"] = row["email"]
             session["role"] = row["role"]
-
-            # Instead of flashing here, set a flag
+              
+            log_login(email)  
+            # Set login success flag
             session["login_success"] = True
 
-            # Log login activity
-            log_login(session["email"])
+            # Log successful login
+            app.logger.info(f" Login successful for {email} (Role: {row['role']})")
 
             # Redirect after login
             return redirect(url_for("dashboard" if session["role"] == "admin" else "index"))
         else:
+            # Log failed attempt
+            app.logger.warning(f" Failed login attempt for {email}")
             flash("Invalid email or password", "danger")
 
     return render_template("login.html")
 
 
+# ------------------- Logout -------------------
 @app.route("/logout")
 @login_required()
 def logout():
     email = session.get("email")
+
     if email:
+        # Log the logout in database and rotating logs
         log_logout(email)
+        app.logger.info(f"User logged out: {email}")
+
+    # Clear session
     session.clear()
-    flash("Logged out", "info")
+    flash("Logged out successfully.", "info")
+
+    # Redirect back to login page
     return redirect(url_for("login"))
+
+#---------------------------------------------------dashboard--------------------------------------S
 @app.route("/dashboard")
 @login_required(role="admin")
 def dashboard():
