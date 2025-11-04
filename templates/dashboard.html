@@ -98,7 +98,6 @@
 
 <!-- Charts Section -->
 <div class="row g-4 mb-5">
-  <!-- Admin vs User Distribution -->
   <div class="col-md-6">
     <div class="card shadow-sm chart-box p-4 h-100">
       <h5 class="card-title text-center mb-3">Admin vs User Distribution</h5>
@@ -108,7 +107,6 @@
     </div>
   </div>
 
-  <!-- Action Performance -->
   <div class="col-md-6">
     <div class="card shadow-sm chart-box p-4 h-100">
       <h5 class="card-title text-center mb-3">Action Performance</h5>
@@ -168,7 +166,7 @@
   </div>
 </div>
 
-<!-- Online/Offline Status -->
+<!-- Online / Offline Status -->
 <div class="section-title">Online / Offline Status</div>
 <div class="card shadow-sm mb-4">
   <div class="card-body table-responsive">
@@ -240,7 +238,6 @@ document.addEventListener("DOMContentLoaded", function() {
   const totalActions = parseInt(document.getElementById("totalActions").textContent) || 0;
   const successfulUpdates = parseInt(document.getElementById("successfulUpdates").textContent) || 0;
 
-  // Modern Horizontal Bar Chart
   new Chart(document.getElementById("adminUserChart"), {
     type: 'bar',
     data: {
@@ -264,7 +261,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // Donut Chart with Total
   new Chart(document.getElementById("actionPieChart"), {
     type: 'doughnut',
     data: {
@@ -282,8 +278,41 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 });
+
+// SSE Real-Time Listener
+document.addEventListener("DOMContentLoaded", () => {
+  if (!!window.EventSource) {
+    const source = new EventSource("/events");
+
+    source.onmessage = function (event) {
+      const data = JSON.parse(event.data);
+      console.log("📊 Dashboard received real-time update:", data);
+
+      // Add latest row dynamically
+      const table = document.querySelector(".table.table-striped.table-bordered.align-middle tbody");
+      if (table) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${data.identifier}</td>
+          <td>${data.success ? '<span class="badge bg-success">Pass</span>' : '<span class="badge bg-danger">Fail</span>'}</td>
+          <td>${data.time}</td>
+          <td>${data.type}</td>
+          <td>${data.reason || ''}</td>
+        `;
+        table.prepend(row);
+      }
+    };
+
+    source.onerror = function (err) {
+      console.error("SSE connection failed:", err);
+    };
+  } else {
+    console.warn("❌ Browser does not support real-time updates.");
+  }
+});
 </script>
 {% endblock %}
+
 
 
 

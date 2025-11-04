@@ -5,12 +5,14 @@ import base64
 import requests
 import sqlite3
 import json
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash, Response
 from threading import Lock, Timer
 from openpyxl import load_workbook
 from dotenv import load_dotenv
 from functools import wraps
 from datetime import datetime, timedelta
+from utils.task_queue import add_task
+import queue
 
 # ---------------- Flask Initialization ----------------
 load_dotenv()
@@ -225,7 +227,21 @@ def patch_line_key(extension_id, line_key_id, new_caller_id, alias=None):
             return False, resp.text
     except Exception as e:
         return False, str(e)
+# ---------------- Real-Time Event System (SSE) ----------------
+event_queue = queue.Queue()
 
+def notify_clients(data):
+    """Send update event to connected clients."""
+    event_queue.put(data)
+
+@app.route("/events")
+def stream_events():
+    """Stream updates to connected clients (SSE)."""
+    def event_stream():
+        while True:
+            data = event_queue.get()
+            yield f"data: {json.dumps(data)}\n\n"
+    return Response(event_stream(), mimetype="text/event-stream")
 # ---------------- Logging helpers (DB + JSON) ----------------
 def log_update_db(email, identifier, caller_id, success, reason, type_, alias=None):
     conn = get_db_connection()
@@ -265,6 +281,102 @@ def log_update(identifier, caller_id, success, reason, type_, updated_by, alias=
         "time": datetime.utcnow().strftime("%d-%b-%Y %H:%M:%S")
     }
     append_report_cache(entry)
+    notify_clients(entry)
+# ---------------- Background Task Worker Functions ----------------
+def process_single_update_task(identifier, caller_id, alias, update_type, user_email):
+    """This runs in background when single update is queued."""
+    print(f"[Task] Starting queued single update for {identifier}")
+
+    ext_id = None
+    email_updated = None
+
+    if update_type == "email":
+        email_updated = identifier
+        ext_id = get_user_extension_id(email_updated)
+
+    elif update_type == "extension_number":
+        ext_id = get_extension_id_from_number(identifier)
+        email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+    elif update_type == "extension_id":
+        ext_id = identifier
+        email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
+
+    else:
+        log_update(identifier, caller_id, False, "Invalid update type", "S", user_email)
+        return
+
+    if not ext_id:
+        log_update(identifier, caller_id, False, "No extension found", "S", user_email)
+        return
+
+    line_keys = get_line_keys(ext_id)
+    if not line_keys:
+        log_update(identifier, caller_id, False, "No line keys found", "S", user_email)
+        return
+
+    for lk in line_keys:
+        current_id = lk.get("key_assignment", {}).get("phone_number", "")
+        if current_id == caller_id:
+            log_update(identifier, caller_id, False, "Caller ID already same", "S", user_email, alias)
+            continue
+
+        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
+        log_update(identifier, caller_id, success, reason, "S", user_email, alias)
+
+    print(f"[Task] Single update completed for {identifier}")
+
+
+def process_bulk_update_task(rows, update_type, user_email):
+    """Background worker for bulk Excel update."""
+    print(f"[Task] Starting queued bulk update for {len(rows)} rows")
+
+    for idx, (identifier, caller_id, alias) in enumerate(rows, start=1):
+        try:
+            ext_id = None
+            email_updated = None
+
+            if update_type == "email":
+                email_updated = identifier
+                ext_id = get_user_extension_id(email_updated)
+
+            elif update_type == "extension_number":
+                ext_id = get_extension_id_from_number(identifier)
+                email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
+
+            elif update_type == "extension_id":
+                ext_id = identifier
+                email_updated = get_email_from_extension_id(ext_id) or f"ExtID_{identifier}"
+
+            else:
+                log_update(identifier, caller_id, False, "Invalid update type", "B", user_email, alias)
+                continue
+
+            if not ext_id:
+                log_update(identifier, caller_id, False, "No extension found", "B", user_email, alias)
+                continue
+
+            line_keys = get_line_keys(ext_id)
+            if not line_keys:
+                log_update(identifier, caller_id, False, "No line keys found", "B", user_email, alias)
+                continue
+
+            for lk in line_keys:
+                current_id = lk.get("key_assignment", {}).get("phone_number", "")
+                if current_id == caller_id:
+                    log_update(identifier, caller_id, False, "Caller ID already same", "B", user_email, alias)
+                    continue
+
+                success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
+                log_update(identifier, caller_id, success, reason, "B", user_email, alias)
+
+            if idx % 10 == 0:
+                print(f"[Task] Processed {idx} rows...")
+
+        except Exception as e:
+            log_update(identifier, caller_id, False, f"Error: {e}", "B", user_email, alias)
+
+    print(f"[Task] Bulk update completed ({len(rows)} records)")
 
 # ---------------- Login activity (online/offline) ----------------
 def log_login(email):
@@ -526,64 +638,14 @@ def single_update():
     if not identifier or not caller_id:
         return jsonify({"status": "error", "message": "Identifier and Caller ID required"}), 400
 
-    # ---------------- Determine type ----------------
-    ext_id = None
-    email_updated = None
-
-    if update_type == "email":
-        email_updated = identifier
-        ext_id = get_user_extension_id(email_updated)
-
-    elif update_type == "extension_number":
-        ext_id = get_extension_id_from_number(identifier)
-        email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
-
-    elif update_type == "extension_id":
-        ext_id = identifier
-        email_updated = get_email_from_extension_id(ext_id) or f"Extension_{ext_id}"
-
-    else:
-        log_update(identifier, caller_id, False, "Invalid update type", "S", session["email"])
-        return jsonify({"status": "error", "message": "Invalid update type"}), 400
-
-    if not ext_id:
-        log_update(identifier, caller_id, False, "No extension found", "S", session["email"])
-        return jsonify({"status": "error", "message": f"No extension found for {identifier}"}), 404
-
-    # ---------------- Get line keys ----------------
-    line_keys = get_line_keys(ext_id)
-    if not line_keys:
-        log_update(identifier, caller_id, False, "No line keys found", "S", session["email"])
-        return jsonify({"status": "error", "message": f"No line keys found for {identifier}"}), 404
-
-    # ---------------- Update caller ID ----------------
-    results = []
-    for lk in line_keys:
-        current_id = lk.get("key_assignment", {}).get("phone_number", "")
-        if current_id == caller_id:
-            log_update(identifier, caller_id, False, "Caller ID already same", "S", session["email"], alias)
-            results.append({
-                "line_key_id": lk.get("line_key_id"),
-                "caller_id": caller_id,
-                "success": False,
-                "reason": "Caller ID already same"
-            })
-            continue
-
-        success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
-        log_update(identifier, caller_id, success, reason, "S", session["email"], alias)
-        results.append({
-            "line_key_id": lk.get("line_key_id"),
-            "caller_id": caller_id,
-            "success": success,
-            "reason": reason
-        })
+    # Queue the background task instead of processing now
+    task_id = f"single_{identifier}_{int(time.time())}"
+    add_task(task_id, process_single_update_task, identifier, caller_id, alias, update_type, session["email"])
 
     return jsonify({
-        "status": "success",
-        "identifier": identifier,
-        "alias": alias or "-",
-        "updated_line_keys": results
+        "status": "queued",
+        "task_id": task_id,
+        "message": f"Update for {identifier} has been queued for processing."
     })
 
 # ---------------- Bulk Update --------------------------------------------------------------------------------------------------------
@@ -597,13 +659,11 @@ def bulk_update():
 
     wb = load_workbook(file)
     sheet = wb.active
-    results = []
 
+    rows = []
     for row in sheet.iter_rows(min_row=1, values_only=True):
         if not row or len(row) < 2:
             continue
-
-        # Handle optional alias (3rd column)
         if len(row) >= 3:
             identifier, caller_id, alias = row[0], row[1], row[2]
         else:
@@ -612,71 +672,17 @@ def bulk_update():
         if not identifier or not caller_id:
             continue
 
-        identifier = str(identifier).strip()
-        caller_id = str(caller_id).strip()
-        alias = str(alias).strip() if alias else None
+        rows.append((str(identifier).strip(), str(caller_id).strip(), str(alias).strip() if alias else None))
 
-        # ---------------- Determine type ----------------
-        ext_id = None
-        email_updated = None
+    # Queue background task
+    task_id = f"bulk_{int(time.time())}"
+    add_task(task_id, process_bulk_update_task, rows, update_type, session["email"])
 
-        if update_type == "email":
-            email_updated = identifier
-            ext_id = get_user_extension_id(email_updated)
-
-        elif update_type == "extension_number":
-            ext_id = get_extension_id_from_number(identifier)
-            email_updated = get_email_from_extension_id(ext_id) or f"ExtNum_{identifier}"
-
-        elif update_type == "extension_id":
-            ext_id = identifier
-            email_updated = get_email_from_extension_id(ext_id) or f"ExtID_{identifier}"
-
-        else:
-            results.append({"identifier": identifier, "status": "fail", "reason": "Invalid update type"})
-            continue
-
-        if not ext_id:
-            log_update(identifier, caller_id, False, "No extension found", "B", session["email"], alias)
-            results.append({"identifier": identifier, "alias": alias, "status": "fail", "reason": "No extension found"})
-            continue
-
-        line_keys = get_line_keys(ext_id)
-        if not line_keys:
-            log_update(identifier, caller_id, False, "No line keys found", "B", session["email"], alias)
-            results.append({"identifier": identifier, "alias": alias, "status": "fail", "reason": "No line keys"})
-            continue
-
-        # ---------------- Update caller ID and alias ----------------
-        lk_results = []
-        for lk in line_keys:
-            current_id = lk.get("key_assignment", {}).get("phone_number", "")
-            if current_id == caller_id:
-                log_update(identifier, caller_id, False, "Caller ID already same", "B", session["email"], alias)
-                lk_results.append({
-                    "line_key_id": lk.get("line_key_id"),
-                    "caller_id": caller_id,
-                    "success": False,
-                    "reason": "Caller ID already same"
-                })
-                continue
-
-            success, reason = patch_line_key(ext_id, lk.get("line_key_id"), caller_id, alias)
-            log_update(identifier, caller_id, success, reason, "B", session["email"], alias)
-            lk_results.append({
-                "line_key_id": lk.get("line_key_id"),
-                "caller_id": caller_id,
-                "success": success,
-                "reason": reason
-            })
-
-        results.append({
-            "identifier": identifier,
-            "alias": alias or "-",
-            "updated_line_keys": lk_results
-        })
-
-    return jsonify({"status": "success", "results": results})
+    return jsonify({
+        "status": "queued",
+        "task_id": task_id,
+        "message": f"{len(rows)} updates queued for background processing."
+    })
 
 # ---------------- Manage Users ----------------
 @app.route("/manage_users", methods=["GET","POST"])

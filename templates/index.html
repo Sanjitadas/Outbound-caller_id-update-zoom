@@ -228,7 +228,32 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 </script>
+
+<!--  Real-time Update Listener -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  if (!!window.EventSource) {
+    const source = new EventSource("/events");
+
+    source.onmessage = function (event) {
+      const data = JSON.parse(event.data);
+      console.log("🔔 New real-time update received:", data);
+
+      if (typeof addReportRow === "function") {
+        addReportRow(data);
+      }
+    };
+
+    source.onerror = function (err) {
+      console.error("SSE connection failed:", err);
+    };
+  } else {
+    console.warn("❌ Your browser does not support real-time updates.");
+  }
+});
+</script>
 {% endblock %}
+
 
 
 
