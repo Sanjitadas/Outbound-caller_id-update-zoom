@@ -254,10 +254,13 @@ def patch_line_key(extension_id, line_key_id, new_caller_id, alias=None):
         resp = requests.patch(url, headers=headers, json=payload)
         if resp.status_code in (200, 204):
             return True, "Updated"
+        elif resp.status_code == 400:
+            # Simplified Zoom error handling
+            return False, "Error 400 — Bad Request."
         else:
-            return False, resp.text
-    except Exception as e:
-        return False, str(e)
+            return False, f"Error {resp.status_code} — Request failed."
+    except Exception:
+        return False, "Error 400 — Bad Request."
 # ---------------- Real-Time Event System (SSE) ----------------
 event_queue = queue.Queue()
 
