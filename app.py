@@ -823,6 +823,15 @@ if __name__ == "__main__":
     # run app
     app.run(host="0.0.0.0", port=5000, debug=True)
 
+@app.teardown_appcontext
+def on_exit(exception):
+    """Clean up background threads when Flask shuts down."""
+    try:
+        from utils.task_queue import shutdown_queue
+        shutdown_queue()
+    except Exception as e:
+        app.logger.error(f"Error shutting down task queue: {e}")
+
 
 
 

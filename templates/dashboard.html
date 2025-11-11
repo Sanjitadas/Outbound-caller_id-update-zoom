@@ -18,7 +18,17 @@
   .card-success {
     background-color: #05041493;
     color: #fff;
+    position: relative;
   }
+  .trend-indicator {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    font-size: 1rem;
+    font-weight: bold;
+  }
+  .trend-up { color: #22c55e; }
+  .trend-down { color: #ef4444; }
   .card:hover {
     transform: translateY(-5px);
     transition: all 0.2s ease;
@@ -37,8 +47,6 @@
     margin-bottom: 1rem;
     font-size: 1.25rem;
   }
-
-  /* Chart boxes white for contrast */
   .chart-box {
     background-color: #ffffff;
     color: #111827;
@@ -54,12 +62,19 @@
     color: #111827;
     font-weight: 600;
   }
+  .chart-updated {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-top: 0.5rem;
+  }
   canvas {
     max-height: 240px !important;
   }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 {% endblock %}
 
 {% block content %}
@@ -69,6 +84,7 @@
 <div class="row g-4 mb-4">
   <div class="col-md-3">
     <div class="card text-center card-primary p-3">
+      <span class="trend-indicator trend-up">▲</span>
       <h5 class="card-title">Total Admins</h5>
       <p class="card-text" id="totalAdmins">{{ total_admin }}</p>
     </div>
@@ -76,6 +92,7 @@
 
   <div class="col-md-3">
     <div class="card text-center card-warning p-3">
+      <span class="trend-indicator trend-up">▲</span>
       <h5 class="card-title">Total Users</h5>
       <p class="card-text" id="totalUsers">{{ total_users }}</p>
     </div>
@@ -83,6 +100,7 @@
 
   <div class="col-md-3">
     <div class="card text-center card-info p-3">
+      <span class="trend-indicator trend-down">▼</span>
       <h5 class="card-title">Total Actions</h5>
       <p class="card-text" id="totalActions">{{ updates|length }}</p>
     </div>
@@ -90,6 +108,7 @@
 
   <div class="col-md-3">
     <div class="card text-center card-success p-3">
+      <span class="trend-indicator trend-up">▲</span>
       <h5 class="card-title">Successful Updates</h5>
       <p class="card-text" id="successfulUpdates">{{ updates|selectattr("success")|select|list|length }}</p>
     </div>
@@ -104,6 +123,7 @@
       <div style="position: relative; height: 240px;">
         <canvas id="adminUserChart"></canvas>
       </div>
+      <div id="adminUserTimestamp" class="chart-updated">Updated just now</div>
     </div>
   </div>
 
@@ -118,6 +138,7 @@
           Total: {{ updates|length }}
         </div>
       </div>
+      <div id="actionPieTimestamp" class="chart-updated">Updated just now</div>
     </div>
   </div>
 </div>
@@ -238,8 +259,12 @@ document.addEventListener("DOMContentLoaded", function() {
   const totalActions = parseInt(document.getElementById("totalActions").textContent) || 0;
   const successfulUpdates = parseInt(document.getElementById("successfulUpdates").textContent) || 0;
 
+  const totalPeople = totalAdmins + totalUsers;
+
+  // --- Admin vs User Chart ---
   new Chart(document.getElementById("adminUserChart"), {
     type: 'bar',
+    plugins: [ChartDataLabels],
     data: {
       labels: ["Admins", "Users"],
       datasets: [{
@@ -253,7 +278,31 @@ document.addEventListener("DOMContentLoaded", function() {
     options: {
       indexAxis: 'y',
       responsive: true,
-      plugins: { legend: { display: false } },
+      animation: {
+        duration: 1200,
+        easing: 'easeOutQuart'
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const value = ctx.raw;
+              const percent = totalPeople ? ((value / totalPeople) * 100).toFixed(1) : 0;
+              return `${ctx.label}: ${value} (${percent}%)`;
+            }
+          }
+        },
+        datalabels: {
+          color: '#111827',
+          anchor: 'end',
+          align: 'right',
+          formatter: function(value) {
+            const percent = totalPeople ? ((value / totalPeople) * 100).toFixed(1) : 0;
+            return `${percent}%`;
+          }
+        }
+      },
       scales: {
         x: { beginAtZero: true, grid: { display: false } },
         y: { grid: { display: false } }
@@ -261,8 +310,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
+  // --- Action Performance Chart ---
   new Chart(document.getElementById("actionPieChart"), {
     type: 'doughnut',
+    plugins: [ChartDataLabels],
     data: {
       labels: ["Successful", "Failed"],
       datasets: [{
@@ -274,21 +325,51 @@ document.addEventListener("DOMContentLoaded", function() {
     },
     options: {
       cutout: "75%",
-      plugins: { legend: { position: "bottom" } }
+      responsive: true,
+      animation: {
+        duration: 1200,
+        easing: 'easeInOutCubic'
+      },
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const value = ctx.raw;
+              const percent = totalActions ? ((value / totalActions) * 100).toFixed(1) : 0;
+              return `${ctx.label}: ${value} (${percent}%)`;
+            }
+          }
+        },
+        datalabels: {
+          color: '#111827',
+          font: { weight: 'bold' },
+          formatter: function(value) {
+            const percent = totalActions ? ((value / totalActions) * 100).toFixed(1) : 0;
+            return `${percent}%`;
+          }
+        }
+      }
     }
   });
+
+  // --- Update timestamps ---
+  function updateTimestamps() {
+    const now = new Date();
+    const timeString = `Updated: ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    document.getElementById("adminUserTimestamp").textContent = timeString;
+    document.getElementById("actionPieTimestamp").textContent = timeString;
+  }
+  updateTimestamps();
 });
 
-// SSE Real-Time Listener
+// --- SSE Listener (unchanged) ---
 document.addEventListener("DOMContentLoaded", () => {
   if (!!window.EventSource) {
     const source = new EventSource("/events");
-
     source.onmessage = function (event) {
       const data = JSON.parse(event.data);
       console.log("📊 Dashboard received real-time update:", data);
-
-      // Add latest row dynamically
       const table = document.querySelector(".table.table-striped.table-bordered.align-middle tbody");
       if (table) {
         const row = document.createElement("tr");
@@ -302,7 +383,6 @@ document.addEventListener("DOMContentLoaded", () => {
         table.prepend(row);
       }
     };
-
     source.onerror = function (err) {
       console.error("SSE connection failed:", err);
     };
@@ -312,6 +392,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 {% endblock %}
+
+
+
 
 
 
